@@ -1,0 +1,40 @@
+{
+  "name": "abc-gui",
+  "version": "0.1.0",
+  "description": "Fully-featured WYSIWYG editor for ABC music notation (framework-free TypeScript).",
+  "keywords": ["abc", "abcjs", "music", "notation", "editor", "wysiwyg", "typescript"],
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.esm.js",
+      "require": "./dist/index.cjs"
+    },
+    "./browser": "./dist/index.iife.js",
+    "./style.css": "./dist/abc-gui.css"
+  },
+  "files": ["dist", "src", "plan.md", "README.md"],
+  "scripts": {
+    "build": "node scripts/build.mjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "demo": "node scripts/build.mjs && node scripts/serve-demo.mjs"
+  },
+  "dependencies": {
+    "abcjs": "^6.4.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "esbuild": "^0.23.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.9"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,277 @@
+/* abc-gui — base stylesheet. Scoped under .abc-gui-root. */
+
+.abc-gui-root {
+  display: flex;
+  flex-direction: column;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  color: #222;
+  background: #fafafa;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  overflow: hidden;
+  /* Enable container queries so the layout responds to this element's
+   * width rather than the viewport — the editor works at any page size. */
+  container-type: inline-size;
+}
+
+.abc-gui-toolbar-host {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px;
+  background: #f0f0f0;
+  border-bottom: 1px solid #ddd;
+}
+
+.abc-gui-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.abc-gui-group {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px 4px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.abc-gui-btn {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  font-size: 14px;
+  line-height: 1;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  cursor: pointer;
+  color: #222;
+}
+.abc-gui-btn:hover { background: #eef; }
+.abc-gui-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.abc-gui-btn.active {
+  background: #d5e4ff;
+  border-color: #6b8fd6;
+}
+
+.abc-gui-body {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  min-height: 240px;
+}
+
+.abc-gui-score-host {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px;
+  overflow: auto;
+  cursor: pointer;
+}
+
+.abc-gui-side-host {
+  flex: 0 0 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Responsive: when the editor container is narrow, stack the score on top
+ * and the property panel / raw view underneath so both stay readable. */
+@container (max-width: 780px) {
+  .abc-gui-body {
+    flex-direction: column;
+  }
+  .abc-gui-side-host {
+    flex: 1 1 auto;
+  }
+}
+/* Viewport fallback for browsers without container-query support. */
+@media (max-width: 780px) {
+  .abc-gui-body {
+    flex-direction: column;
+  }
+  .abc-gui-side-host {
+    flex: 1 1 auto;
+  }
+}
+
+.abc-gui-panel-host,
+.abc-gui-raw-host {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.abc-gui-panel-empty {
+  color: #888;
+  font-style: italic;
+}
+
+.abc-gui-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #eee;
+}
+.abc-gui-kind { font-weight: 600; }
+.abc-gui-range { color: #888; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+
+.abc-gui-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0;
+}
+
+.abc-gui-label {
+  min-width: 70px;
+  color: #555;
+  font-size: 12px;
+}
+
+.abc-gui-readout {
+  display: inline-block;
+  min-width: 18px;
+  text-align: center;
+  font-family: ui-monospace, Menlo, monospace;
+}
+
+.abc-gui-muted {
+  color: #888;
+  font-size: 12px;
+}
+
+.abc-gui-input {
+  font: inherit;
+  padding: 3px 6px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fff;
+}
+.abc-gui-input-small { width: 48px; }
+
+.abc-gui-section-title {
+  margin: 8px 0 2px;
+  font-weight: 600;
+  font-size: 12px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.abc-gui-chord-note-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 1px dashed #ddd;
+  border-radius: 3px;
+  margin-bottom: 6px;
+  background: #fafafa;
+}
+
+.abc-gui-chord-note-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid #eee;
+}
+
+.abc-gui-chord-note-title {
+  font-weight: 600;
+  font-size: 12px;
+  color: #444;
+}
+
+.abc-gui-chord-note-remove {
+  color: #a33;
+  border-color: #d8a8a8;
+}
+.abc-gui-chord-note-remove:hover {
+  background: #fbecec;
+}
+
+.abc-gui-chord-add {
+  margin-top: 4px;
+}
+
+.abc-gui-deco-row { flex-wrap: wrap; }
+
+.abc-gui-prefix {
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed #eee;
+}
+
+.abc-gui-raw {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #ddd;
+}
+.abc-gui-raw-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 54px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 13px;
+  padding: 4px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+}
+
+.abc-gui-raw-view-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 140px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 13px;
+  padding: 6px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+}
+
+/* Keep the selection clearly visible even when the textarea is NOT focused.
+ * Browsers normally render the inactive selection in a dim system gray that
+ * is almost invisible on a light background; forcing our own ::selection
+ * color means the highlight we set from the score / property panel always
+ * reads, regardless of which sub-view currently owns focus. */
+.abc-gui-raw-view-textarea::selection {
+  background: #3b82f6;
+  color: #fff;
+}
+.abc-gui-raw-view-textarea::-moz-selection {
+  background: #3b82f6;
+  color: #fff;
+}
+/* Chromium renders the unfocused selection only when this rule is present
+ * with an explicit color — without it the selection disappears on blur. */
+.abc-gui-raw-view-textarea:not(:focus)::selection {
+  background: #3b82f6;
+  color: #fff;
+}
+
+/* Selected element highlight. abcjs wraps each note in a <g>; we just paint
+ * over the fill so the selection reads clearly with minimal specificity. */
+.abc-gui-selected,
+.abc-gui-selected * {
+  fill: #1659c7 !important;
+  stroke: #1659c7 !important;
+}
