@@ -24,6 +24,12 @@ export class AbcEditor {
   private panel: PropertyPanel;
   private raw: RawView | null = null;
   private currentSelection: Selection | null = null;
+  /** abcjs CSS classes for the currently selected SVG group (when known).
+   *  Cached so we can re-highlight the same element after a re-render
+   *  triggered by a property edit — without this, the score-view's
+   *  positional fallback (`abcjs-n<startChar>`) does not match because
+   *  abcjs assigns `abcjs-n<noteIndexInMeasure>`, not character offsets. */
+  private currentClasses: string | null = null;
   private changeDebounce: ReturnType<typeof setTimeout> | null = null;
   private keydownHandler: ((ev: KeyboardEvent) => void) | null = null;
   private player: MidiPlayer;
@@ -85,7 +91,15 @@ export class AbcEditor {
     this.doc.on((ev) => {
       if (this.currentSelection) {
         this.currentSelection = remapRange(this.currentSelection, ev);
-        this.score.setSelected(this.currentSelection);
+        if (this.currentSelection === null) {
+          // Edit destroyed the original anchor (e.g. setValue / undo of a
+          // surrounding replacement) — drop cached classes too.
+          this.currentClasses = null;
+        }
+        // Re-apply the SVG selection using the cached classes so the
+        // highlight stays visible after a property-panel-driven edit
+        // re-renders the score.
+        this.score.setSelected(this.currentSelection, this.currentClasses);
         this.panel.setSelection(this.currentSelection);
         if (this.currentSelection && this.raw) {
           this.raw.highlightRange(
@@ -127,6 +141,7 @@ export class AbcEditor {
   setValue(v: string, opts: { silent?: boolean } = {}): void {
     this.doc.setValue(v, opts);
     this.currentSelection = null;
+    this.currentClasses = null;
     this.panel.setSelection(null);
     this.score.setSelected(null);
   }
@@ -290,6 +305,7 @@ export class AbcEditor {
 
   private select(sel: Selection | null, classes: string | null = null): void {
     this.currentSelection = sel;
+    this.currentClasses = sel ? classes : null;
     this.score.setSelected(sel, classes);
     this.panel.setSelection(sel);
     if (this.raw && sel) {

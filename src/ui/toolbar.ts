@@ -100,7 +100,7 @@ export class Toolbar {
       playbackGroup,
       modeGroup,
       // Insert group: only standalone score elements live here. Note/rest
-      // properties — accidentals, length, ties, triplets, slurs, grace
+      // properties — accidentals, length, ties, slurs, triplets, grace
       // notes, chord symbols, annotations, and decorations — are edited
       // via the property panel of the selected note instead.
       this.group("Insert", [
@@ -116,12 +116,6 @@ export class Toolbar {
         { glyph: "♯", title: "sharp" + shiftHint, snippet: "^" },
         { glyph: "♭", title: "flat" + shiftHint, snippet: "_" },
         { glyph: "♮", title: "natural" + shiftHint, snippet: "=" }
-      ]),
-      this.group("Decoration", [
-        { glyph: "·", title: "staccato" + shiftHint, snippet: "!staccato!" },
-        { glyph: "𝄐", title: "fermata" + shiftHint, snippet: "!fermata!" },
-        { glyph: "𝆖", title: "trill" + shiftHint, snippet: "!trill!" },
-        { glyph: ">", title: "accent" + shiftHint, snippet: "!>!" }
       ]),
       this.group("Header", [
         {
