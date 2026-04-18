@@ -269,6 +269,34 @@ export class AbcDocument {
   }
 
   /**
+   * Find the last info-field line with the given name at or before `offset`.
+   * This is used to map rendered staff symbols like clef/key/meter back to
+   * their editable source line when abcjs doesn't provide a precise field span.
+   */
+  findInfoLineByName(
+    name: string,
+    offset = this._value.length
+  ): { startChar: number; endChar: number } | null {
+    const v = this._value;
+    const limit = Math.max(0, Math.min(offset, v.length));
+    let lineStart = 0;
+    let last: { startChar: number; endChar: number } | null = null;
+
+    while (lineStart <= limit) {
+      let lineEnd = v.indexOf("\n", lineStart);
+      if (lineEnd === -1) lineEnd = v.length;
+      const line = v.slice(lineStart, lineEnd);
+      if (new RegExp(`^\\s*${name}:`).test(line)) {
+        last = { startChar: lineStart, endChar: lineEnd };
+      }
+      if (lineEnd >= limit) break;
+      lineStart = lineEnd + 1;
+    }
+
+    return last;
+  }
+
+  /**
    * Return the effective unit note length (`L:`) in force at `offset`.
    *
    * ABC 2.1 allows `L:` to appear as a header line, as a body line mid-tune,

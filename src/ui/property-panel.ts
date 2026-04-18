@@ -647,17 +647,42 @@ export class PropertyPanel {
   // ---- Info-field editors ------------------------------------------------
 
   private keyEditor(value: string, onChange: (v: string) => void): HTMLElement {
-    // Parse "G", "Gm", "Gmaj", "G#mix", "Ddor", etc.
-    const m = /^([A-Ga-g])([#b]?)([A-Za-z]*)/.exec(value) || [];
+    // Parse K: value into primary key token + trailing modifiers. Example:
+    //   "G clef=bass"
+    //   "Dmix transpose=2 clef=treble"
+    const tokens = value.trim().split(/\s+/).filter((t) => t.length > 0);
+    const keyToken = tokens[0] ?? "C";
+    const modifiers = tokens.slice(1);
+
+    // Parse primary key token: "G", "Gm", "Gmaj", "G#mix", "Ddor", etc.
+    const m = /^([A-Ga-g])([#b]?)([A-Za-z]*)/.exec(keyToken) || [];
     let tonic = (m[1] || "C").toUpperCase();
     let acc = m[2] || "";
     let mode = (m[3] || "maj").toLowerCase();
     const modes = ["maj", "min", "m", "dor", "phr", "lyd", "mix", "aeo", "loc"];
 
+    // Pull out clef=... but keep all other modifiers untouched.
+    const remainingMods: string[] = [];
+    let clef = "";
+    for (const tok of modifiers) {
+      const c = /^clef\s*=\s*(.+)$/i.exec(tok);
+      if (c) {
+        clef = c[1]!.toLowerCase();
+      } else {
+        remainingMods.push(tok);
+      }
+    }
+
     const row = el("div", { class: "abc-gui-row" }, [
       el("span", { class: "abc-gui-label" }, ["K:"])
     ]);
-    const fire = () => onChange(tonic + acc + (mode === "maj" ? "" : mode));
+    const fire = () => {
+      const key = tonic + acc + (mode === "maj" ? "" : mode);
+      const parts = [key, ...remainingMods];
+      if (clef) parts.push(`clef=${clef}`);
+      onChange(parts.join(" "));
+    };
+
     const tonicSel = el("select", { class: "abc-gui-input" }) as HTMLSelectElement;
     for (const L of ["A", "B", "C", "D", "E", "F", "G"]) {
       const o = el("option", { value: L }, [L]) as HTMLOptionElement;
@@ -691,7 +716,26 @@ export class PropertyPanel {
       fire();
     });
 
-    row.append(tonicSel, accSel, modeSel);
+    const clefSel = el("select", { class: "abc-gui-input" }) as HTMLSelectElement;
+    for (const [val, label] of [
+      ["", "clef: (none)"],
+      ["treble", "clef: treble"],
+      ["bass", "clef: bass"],
+      ["alto", "clef: alto"],
+      ["tenor", "clef: tenor"],
+      ["perc", "clef: percussion"],
+      ["none", "clef: none"]
+    ] as const) {
+      const o = el("option", { value: val }, [label]) as HTMLOptionElement;
+      if (val === clef) o.selected = true;
+      clefSel.append(o);
+    }
+    clefSel.addEventListener("change", () => {
+      clef = clefSel.value;
+      fire();
+    });
+
+    row.append(tonicSel, accSel, modeSel, clefSel);
     return row;
   }
 

@@ -152,11 +152,57 @@ export class AbcEditor {
     // selections that land inside a header line or inline field up to the
     // whole field. This keeps notes / bars / rests unchanged because they
     // live in music-body lines where `infoLineAt` returns null.
-    let startChar = ev.startChar;
-    let endChar = ev.endChar;
+    let { startChar, endChar } = this.resolveClickRange(ev);
+    const semanticName = [
+      ev.analysis?.name,
+      ev.analysis?.clickedName,
+      ev.classes,
+      this.asObj(ev.abcelem)?.el_type,
+      this.asObj(ev.abcelem)?.type
+    ]
+      .filter((s): s is string => typeof s === "string" && s.length > 0)
+      .join(" ")
+      .toLowerCase();
 
-    // Guard: some abcelem types (e.g. pure metadata) report -1/-1. Try to
-    // recover by treating the click as unlocated and bail out silently.
+    // abcjs exposes staff-level symbols (clef, key signature, time
+    // signature, tempo) via click-analysis names like `staff-extra clef`.
+    // Those symbols are editable through their owning source field, so map
+    // them back onto the nearest relevant info line before falling back to
+    // the raw click range.
+    const fallbackOffset = startChar >= 0 ? startChar : this.doc.value.length;
+    if (
+      semanticName.includes("clef") ||
+      semanticName.includes("staff-extra clef") ||
+      semanticName.includes("staff-extra key-signature") ||
+      semanticName.includes("key-signature")
+    ) {
+      const keyInfo = this.doc.findInfoLineByName("K", fallbackOffset);
+      if (keyInfo) {
+        this.select(keyInfo, ev.classes);
+        return;
+      }
+    }
+    if (
+      semanticName.includes("staff-extra time-signature") ||
+      semanticName.includes("time-signature") ||
+      semanticName.includes("meter")
+    ) {
+      const meterInfo = this.doc.findInfoLineByName("M", fallbackOffset);
+      if (meterInfo) {
+        this.select(meterInfo, ev.classes);
+        return;
+      }
+    }
+    if (semanticName.includes("tempo")) {
+      const tempoInfo = this.doc.findInfoLineByName("Q", fallbackOffset);
+      if (tempoInfo) {
+        this.select(tempoInfo, ev.classes);
+        return;
+      }
+    }
+
+    // Guard: some abcelem types report no usable source range. After the
+    // semantic fallbacks above, treat those clicks as unlocated.
     if (startChar < 0 || endChar < 0 || endChar < startChar) {
       this.select(null, ev.classes);
       return;
@@ -179,6 +225,40 @@ export class AbcEditor {
     }
 
     this.select({ startChar, endChar }, ev.classes);
+  }
+
+  private resolveClickRange(ev: SelectionEvent): { startChar: number; endChar: number } {
+    let startChar = ev.startChar;
+    let endChar = ev.endChar;
+    if (startChar >= 0 && endChar >= startChar) {
+      return { startChar, endChar };
+    }
+
+    const raw = this.asObj(ev.abcelem);
+    const s = this.firstFinite(raw?.startChar, raw?.startCharArray);
+    const e = this.firstFinite(raw?.endChar, raw?.endCharArray);
+    if (s !== null && e !== null && e >= s) {
+      startChar = s;
+      endChar = e;
+    }
+    return { startChar, endChar };
+  }
+
+  private asObj(v: unknown): Record<string, unknown> | null {
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+  }
+
+  private firstFinite(
+    scalar: unknown,
+    list: unknown
+  ): number | null {
+    if (typeof scalar === "number" && Number.isFinite(scalar)) return scalar;
+    if (Array.isArray(list)) {
+      for (const item of list) {
+        if (typeof item === "number" && Number.isFinite(item)) return item;
+      }
+    }
+    return null;
   }
 
   private handleRawCaret(start: number, end: number): void {

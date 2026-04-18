@@ -17,6 +17,13 @@ export interface SelectionEvent {
   classes: string;
   /** the raw `abcelem` object as abcjs exposes it */
   abcelem: unknown;
+  /** semantic click metadata from abcjs for non-note staff symbols */
+  analysis?: {
+    name?: string;
+    clickedName?: string;
+    line?: number;
+    measure?: number;
+  };
 }
 
 export class ScoreView {
@@ -102,19 +109,20 @@ export class ScoreView {
           [k: string]: unknown;
         },
         _tuneNumber: number,
-        classes: string
-      ) => {
-        if (
-          typeof abcelem.startChar !== "number" ||
-          typeof abcelem.endChar !== "number"
-        ) {
-          return;
+        classes: string,
+        analysis?: {
+          name?: string;
+          clickedName?: string;
+          line?: number;
+          measure?: number;
         }
+      ) => {
         const ev: SelectionEvent = {
-          startChar: abcelem.startChar,
-          endChar: abcelem.endChar,
+          startChar: typeof abcelem.startChar === "number" ? abcelem.startChar : -1,
+          endChar: typeof abcelem.endChar === "number" ? abcelem.endChar : -1,
           classes: typeof classes === "string" ? classes : "",
-          abcelem
+          abcelem,
+          analysis
         };
         for (const l of this.listeners) l(ev);
       }
