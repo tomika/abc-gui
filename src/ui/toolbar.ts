@@ -3,9 +3,10 @@
  * inserts a snippet after the current selection (or at end of document if
  * nothing is selected). Shift-click inserts BEFORE the selection instead.
  *
- * Info-field buttons (the "Header" group) always land on their own line:
- * the snippet is placed at the nearest line boundary so it never splits an
- * existing music / header line or ends up mid-line.
+ * Info-field buttons (the "Header" group) and the line-break button always
+ * land on their own line: the snippet is inserted at the current selection
+ * position and the surrounding text is split with newlines as needed, so
+ * the positional meaning of fields like K:, M:, L:, V:, … is preserved.
  */
 
 import { AbcDocument } from "../model/document.js";
@@ -36,8 +37,20 @@ interface InsertSpec {
   title: string;
   /** raw snippet inserted around the selection */
   snippet: string;
-  /** true → place snippet on its own line (info fields) */
+  /** true → place snippet on its own line (info fields). The snippet is
+   *  inserted at the current selection position, and the surrounding text
+   *  is split with newlines as needed so the snippet ends up on a line of
+   *  its own. The selection's character offsets retain their meaning, so
+   *  positional info fields like K:, M:, L:, [V:n] etc. land where the
+   *  user expects. */
   infoField?: boolean;
+  /** true → snippet is a bare newline whose only job is to split the line
+   *  at the current selection position. */
+  lineBreak?: boolean;
+  /** true → instead of inserting, remove the nearest newline next to the
+   *  current selection (joining two lines). With `before=true` the previous
+   *  line break is removed; otherwise the next one is removed. */
+  joinLineBreak?: boolean;
 }
 
 export class Toolbar {
@@ -110,12 +123,21 @@ export class Toolbar {
         { glyph: "∣", title: "insert bar line" + shiftHint, snippet: "|" },
         { glyph: "‖", title: "insert double bar" + shiftHint, snippet: "||" },
         { glyph: "|:", title: "insert start-repeat" + shiftHint, snippet: "|:" },
-        { glyph: ":|", title: "insert end-repeat" + shiftHint, snippet: ":|" }
-      ]),
-      this.group("Accidental", [
-        { glyph: "♯", title: "sharp" + shiftHint, snippet: "^" },
-        { glyph: "♭", title: "flat" + shiftHint, snippet: "_" },
-        { glyph: "♮", title: "natural" + shiftHint, snippet: "=" }
+        { glyph: ":|", title: "insert end-repeat" + shiftHint, snippet: ":|" },
+        {
+          glyph: "↵",
+          title: "insert line break (split current line at the selection)" + shiftHint,
+          snippet: "\n",
+          lineBreak: true
+        },
+        {
+          glyph: "⌫↵",
+          title:
+            "remove line break (join the current line with the next one; with Shift, join with the previous line)",
+          // Snippet is unused for joinLineBreak — handled specially in insert().
+          snippet: "",
+          joinLineBreak: true
+        }
       ]),
       this.group("Header", [
         {
@@ -174,19 +196,46 @@ export class Toolbar {
     const doc = this.deps.doc;
     const src = doc.value;
 
+    if (spec.joinLineBreak) {
+      // Remove the nearest newline relative to the selection so the user can
+      // merge two lines without dropping into the raw editor.
+      const anchor = sel ? (before ? sel.startChar : sel.endChar) : src.length;
+      const nlPos = before
+        ? src.lastIndexOf("\n", Math.max(0, anchor - 1))
+        : src.indexOf("\n", anchor);
+      if (nlPos < 0) return;
+      doc.replace(nlPos, nlPos + 1, "");
+      // Keep the caret where the join happened so subsequent inserts are
+      // anchored predictably.
+      this.deps.setSelection({ startChar: nlPos, endChar: nlPos });
+      return;
+    }
+
+    if (spec.lineBreak) {
+      // A bare line break: just insert the snippet at the current position.
+      // No wrapping — the snippet IS the newline.
+      const anchor = sel ? (before ? sel.startChar : sel.endChar) : src.length;
+      doc.replace(anchor, anchor, spec.snippet);
+      this.deps.setSelection({
+        startChar: anchor,
+        endChar: anchor + spec.snippet.length
+      });
+      return;
+    }
+
     if (spec.infoField) {
       // Info fields must live on their own line. Pin the insertion point to
-      // a line boundary and wrap the snippet with the newlines needed to
-      // keep surrounding content intact.
+      // the current selection position (preserving the positional meaning of
+      // K:/M:/L:/V: etc.) and surround the snippet with the newlines needed
+      // to keep it on a line of its own — splitting the surrounding line if
+      // the anchor is mid-line.
       const anchor = sel ? (before ? sel.startChar : sel.endChar) : src.length;
-      const pos = before ? startOfLine(src, anchor) : endOfLine(src, anchor);
-      const needLeadingNL =
-        pos > 0 && src[pos - 1] !== "\n" ? "\n" : "";
+      const needLeadingNL = anchor > 0 && src[anchor - 1] !== "\n" ? "\n" : "";
       const needTrailingNL =
-        pos < src.length && src[pos] !== "\n" ? "\n" : "";
+        anchor < src.length && src[anchor] !== "\n" ? "\n" : "";
       const text = needLeadingNL + spec.snippet + needTrailingNL;
-      doc.replace(pos, pos, text);
-      const selStart = pos + needLeadingNL.length;
+      doc.replace(anchor, anchor, text);
+      const selStart = anchor + needLeadingNL.length;
       this.deps.setSelection({
         startChar: selStart,
         endChar: selStart + spec.snippet.length
@@ -210,16 +259,4 @@ export class Toolbar {
       });
     }
   }
-}
-
-function startOfLine(src: string, offset: number): number {
-  let s = Math.max(0, Math.min(offset, src.length));
-  while (s > 0 && src[s - 1] !== "\n") s--;
-  return s;
-}
-
-function endOfLine(src: string, offset: number): number {
-  let e = Math.max(0, Math.min(offset, src.length));
-  while (e < src.length && src[e] !== "\n") e++;
-  return e;
 }
