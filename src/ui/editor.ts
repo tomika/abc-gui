@@ -4,6 +4,7 @@
 
 import { AbcDocument } from "../model/document.js";
 import { ScoreView, SelectionEvent } from "../render/score-view.js";
+import { MidiPlayer } from "../render/midi-player.js";
 import { PropertyPanel, Selection } from "./property-panel.js";
 import { Toolbar } from "./toolbar.js";
 import { RawView } from "./raw-view.js";
@@ -25,6 +26,9 @@ export class AbcEditor {
   private currentSelection: Selection | null = null;
   private changeDebounce: ReturnType<typeof setTimeout> | null = null;
   private keydownHandler: ((ev: KeyboardEvent) => void) | null = null;
+  private player: MidiPlayer;
+  private playbackListeners: (() => void)[] = [];
+  private rawSelectEnabled = true;
 
   constructor(container: HTMLElement, opts: AbcEditorOptions = {}) {
     this.container = container;
@@ -47,6 +51,13 @@ export class AbcEditor {
 
     this.score = new ScoreView(scoreHost, this.doc);
     this.panel = new PropertyPanel(panelHost, this.doc);
+    this.player = new MidiPlayer();
+    // Any re-render invalidates the primed synth buffer so playback always
+    // reflects the latest ABC source.
+    this.score.onRender(() => {
+      this.player.invalidate();
+      this.firePlaybackChange();
+    });
     if (!opts.hideRawView) {
       this.raw = new RawView(rawHost, this.doc);
       // Clicking / moving caret in the raw textarea selects the enclosing
@@ -56,7 +67,16 @@ export class AbcEditor {
     new Toolbar(toolbarHost, {
       doc: this.doc,
       getSelection: () => this.currentSelection,
-      setSelection: (s) => this.select(s)
+      setSelection: (s) => this.select(s),
+      getRawSelectEnabled: () => this.rawSelectEnabled,
+      setRawSelectEnabled: (v) => {
+        this.rawSelectEnabled = v;
+      },
+      playSupported: MidiPlayer.isSupported(),
+      isPlaying: () => this.player.isPlaying(),
+      play: () => this.handlePlay(),
+      stop: () => this.handleStop(),
+      onPlaybackStateChange: (cb) => this.playbackListeners.push(cb)
     });
 
     this.score.onSelect((ev) => this.handleScoreClick(ev));
@@ -116,6 +136,7 @@ export class AbcEditor {
     if (this.keydownHandler) {
       this.container.removeEventListener("keydown", this.keydownHandler);
     }
+    this.player.invalidate();
     this.score.destroy();
     this.container.innerHTML = "";
     this.container.classList.remove("abc-gui-root");
@@ -128,6 +149,7 @@ export class AbcEditor {
   }
 
   private handleRawCaret(start: number, end: number): void {
+    if (!this.rawSelectEnabled) return;
     // If the user made an explicit selection in the textarea, respect it.
     if (end > start) {
       this.select({ startChar: start, endChar: end });
@@ -160,6 +182,33 @@ export class AbcEditor {
     if (this.raw && sel) {
       this.raw.highlightRange(sel.startChar, sel.endChar);
     }
+  }
+
+  private handlePlay(): void {
+    const tune = this.score.getTune();
+    if (!tune) return;
+    const startChar = this.currentSelection?.startChar;
+    this.player
+      .play(tune, { startChar })
+      .then(() => this.firePlaybackChange())
+      .catch((err) => {
+        // Surface errors to the console but do not crash the editor — MIDI
+        // is optional and can fail for environment reasons (no audio
+        // context, soundfont CDN blocked, …).
+        // eslint-disable-next-line no-console
+        console.warn("[abc-gui] playback failed:", err);
+        this.firePlaybackChange();
+      });
+    this.firePlaybackChange();
+  }
+
+  private handleStop(): void {
+    this.player.stop();
+    this.firePlaybackChange();
+  }
+
+  private firePlaybackChange(): void {
+    for (const l of [...this.playbackListeners]) l();
   }
 }
 

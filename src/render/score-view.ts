@@ -23,9 +23,11 @@ export class ScoreView {
   private host: HTMLElement;
   private doc: AbcDocument;
   private listeners: ((ev: SelectionEvent) => void)[] = [];
+  private renderListeners: (() => void)[] = [];
   private renderTimer: ReturnType<typeof setTimeout> | null = null;
   private selected: { startChar: number; endChar: number } | null = null;
   private selectedClasses: string | null = null;
+  private lastTune: unknown = null;
 
   constructor(host: HTMLElement, doc: AbcDocument) {
     this.host = host;
@@ -37,6 +39,16 @@ export class ScoreView {
 
   onSelect(cb: (ev: SelectionEvent) => void): void {
     this.listeners.push(cb);
+  }
+
+  /** Fires after each (debounced) abcjs render completes. */
+  onRender(cb: () => void): void {
+    this.renderListeners.push(cb);
+  }
+
+  /** The most recently rendered abcjs tune object, or null if unavailable. */
+  getTune(): unknown {
+    return this.lastTune;
   }
 
   setSelected(
@@ -70,7 +82,7 @@ export class ScoreView {
       this.host.textContent = "(abcjs not available)";
       return;
     }
-    api.renderAbc(this.host, this.doc.value, {
+    const result = api.renderAbc(this.host, this.doc.value, {
       add_classes: true,
       responsive: "resize",
       // Make every drawn element selectable — by default abcjs only allows
@@ -101,7 +113,11 @@ export class ScoreView {
         for (const l of this.listeners) l(ev);
       }
     });
+    // `renderAbc` returns an array of TuneObjects (one per `X:`). Keep the
+    // first so the editor can reuse it for MIDI synthesis / timing queries.
+    this.lastTune = Array.isArray(result) ? result[0] ?? null : null;
     this.applySelectionStyle();
+    for (const l of [...this.renderListeners]) l();
   }
 
   /** Highlight the SVG group(s) that represent the selected element. */

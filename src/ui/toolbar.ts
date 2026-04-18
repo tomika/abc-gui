@@ -15,6 +15,18 @@ export interface ToolbarDeps {
   doc: AbcDocument;
   getSelection: () => { startChar: number; endChar: number } | null;
   setSelection: (s: { startChar: number; endChar: number } | null) => void;
+  /** raw-textarea-to-selection binding: when false, clicking / moving the
+   *  caret in the raw view no longer drives the element selection, so the
+   *  user can edit the text freely without the panel jumping around. */
+  getRawSelectEnabled: () => boolean;
+  setRawSelectEnabled: (enabled: boolean) => void;
+  /** MIDI playback. When `playSupported` is false the buttons are disabled. */
+  playSupported: boolean;
+  isPlaying: () => boolean;
+  play: () => void;
+  stop: () => void;
+  /** Subscribe to playback-state changes so the toolbar can toggle icons. */
+  onPlaybackStateChange: (cb: () => void) => void;
 }
 
 interface InsertSpec {
@@ -33,6 +45,9 @@ export class Toolbar {
   private deps: ToolbarDeps;
   private undoBtn: HTMLButtonElement | null = null;
   private redoBtn: HTMLButtonElement | null = null;
+  private playBtn: HTMLButtonElement | null = null;
+  private stopBtn: HTMLButtonElement | null = null;
+  private rawSelectBtn: HTMLButtonElement | null = null;
 
   constructor(host: HTMLElement, deps: ToolbarDeps) {
     this.host = host;
@@ -41,7 +56,10 @@ export class Toolbar {
     this.render();
     // Refresh undo/redo enabled state whenever the document changes.
     this.deps.doc.on(() => this.updateHistoryButtons());
+    this.deps.onPlaybackStateChange(() => this.updatePlaybackButtons());
     this.updateHistoryButtons();
+    this.updatePlaybackButtons();
+    this.updateRawSelectButton();
   }
 
   private render(): void {
@@ -52,10 +70,35 @@ export class Toolbar {
     const historyGroup = el("div", { class: "abc-gui-group", title: "History" });
     historyGroup.append(undoBtn, redoBtn);
 
+    const playBtn = button("▶", "play (from selected note, or from start)", () =>
+      this.deps.play()
+    );
+    const stopBtn = button("■", "stop playback", () => this.deps.stop());
+    playBtn.disabled = !this.deps.playSupported;
+    stopBtn.disabled = !this.deps.playSupported;
+    this.playBtn = playBtn;
+    this.stopBtn = stopBtn;
+    const playbackGroup = el("div", { class: "abc-gui-group", title: "Playback" });
+    playbackGroup.append(playBtn, stopBtn);
+
+    const rawSelectBtn = button(
+      "⇌",
+      "toggle raw-text → element selection (when off, you can edit the raw ABC freely without the panel jumping around)",
+      () => {
+        this.deps.setRawSelectEnabled(!this.deps.getRawSelectEnabled());
+        this.updateRawSelectButton();
+      }
+    );
+    this.rawSelectBtn = rawSelectBtn;
+    const modeGroup = el("div", { class: "abc-gui-group", title: "Modes" });
+    modeGroup.append(rawSelectBtn);
+
     const shiftHint = " (hold Shift to insert before selection)";
 
     this.host.append(
       historyGroup,
+      playbackGroup,
+      modeGroup,
       this.group("Insert", [
         { glyph: "♪", title: "insert note (C)" + shiftHint, snippet: "C" },
         { glyph: "𝄽", title: "insert rest" + shiftHint, snippet: "z" },
@@ -107,6 +150,24 @@ export class Toolbar {
   private updateHistoryButtons(): void {
     if (this.undoBtn) this.undoBtn.disabled = !this.deps.doc.canUndo();
     if (this.redoBtn) this.redoBtn.disabled = !this.deps.doc.canRedo();
+  }
+
+  private updatePlaybackButtons(): void {
+    if (!this.playBtn || !this.stopBtn) return;
+    const supported = this.deps.playSupported;
+    const playing = supported && this.deps.isPlaying();
+    this.playBtn.classList.toggle("active", playing);
+    this.playBtn.disabled = !supported;
+    this.stopBtn.disabled = !supported;
+  }
+
+  private updateRawSelectButton(): void {
+    if (!this.rawSelectBtn) return;
+    const on = this.deps.getRawSelectEnabled();
+    this.rawSelectBtn.classList.toggle("active", on);
+    this.rawSelectBtn.title = on
+      ? "raw-text → element selection: ON (click to disable for free-form raw editing)"
+      : "raw-text → element selection: OFF (click to re-enable caret-based selection)";
   }
 
   private group(name: string, specs: ReadonlyArray<InsertSpec>): HTMLElement {
