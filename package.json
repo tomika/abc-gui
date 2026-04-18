@@ -17,7 +17,7 @@
     "./browser": "./dist/index.iife.js",
     "./style.css": "./dist/abc-gui.css"
   },
-  "files": ["dist", "src", "plan.md", "README.md"],
+  "files": ["dist", "src", "README.md"],
   "scripts": {
     "build": "node scripts/build.mjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
     "typecheck": "tsc -p tsconfig.json --noEmit",
