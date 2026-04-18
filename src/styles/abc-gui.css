@@ -1,18 +1,76 @@
-/* abc-gui — base stylesheet. Scoped under .abc-gui-root. */
+/* abc-gui — base stylesheet. Scoped under .abc-gui-root.
+ *
+ * Theme tokens are exposed as CSS custom properties so a host can override
+ * individual values and so dark mode (toggled via `.abc-gui-dark`) is a
+ * pure CSS concern. Layout is stable: the score and properties pane have
+ * fixed sizes to prevent UI jumping; the raw-text view sits below the two
+ * and spans the full width. The root fills its host and scrolls
+ * vertically when its content overflows.
+ */
 
 .abc-gui-root {
+  /* Light theme tokens. Dark mode overrides these below. */
+  --abc-bg: #fafafa;
+  --abc-surface: #ffffff;
+  --abc-surface-2: #f0f0f0;
+  --abc-border: #ddd;
+  --abc-border-strong: #ccc;
+  --abc-text: #222;
+  --abc-text-muted: #888;
+  --abc-text-subtle: #555;
+  --abc-btn-bg: #ffffff;
+  --abc-btn-bg-hover: #eef;
+  --abc-btn-text: #222;
+  --abc-btn-active-bg: #d5e4ff;
+  --abc-btn-active-border: #6b8fd6;
+  --abc-selection-bg: #3b82f6;
+  --abc-selection-text: #ffffff;
+  --abc-score-fill: #111;
+  --abc-score-stroke: #111;
+  --abc-note-selected: #1659c7;
+  --abc-panel-pane-width: 360px;
+  --abc-score-pane-width: 560px;
+  --abc-pane-height: 360px;
+
   display: flex;
   flex-direction: column;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 14px;
-  color: #222;
-  background: #fafafa;
-  border: 1px solid #ccc;
+  color: var(--abc-text);
+  background: var(--abc-bg);
+  border: 1px solid var(--abc-border-strong);
   border-radius: 6px;
+  /* Fill the host element — the embedder controls the outer sizing, we just
+   * grow to match and scroll inside when needed. */
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
   overflow: hidden;
-  /* Enable container queries so the layout responds to this element's
-   * width rather than the viewport — the editor works at any page size. */
   container-type: inline-size;
+}
+
+.abc-gui-dark {
+  --abc-bg: #1e1f22;
+  --abc-surface: #26282c;
+  --abc-surface-2: #2c2f34;
+  --abc-border: #3a3d42;
+  --abc-border-strong: #4a4e54;
+  --abc-text: #e4e6ea;
+  --abc-text-muted: #8a8f97;
+  --abc-text-subtle: #aab0b9;
+  --abc-btn-bg: #2c2f34;
+  --abc-btn-bg-hover: #3a3f47;
+  --abc-btn-text: #e4e6ea;
+  --abc-btn-active-bg: #2d4576;
+  --abc-btn-active-border: #5380d6;
+  --abc-selection-bg: #4f7dd6;
+  --abc-selection-text: #ffffff;
+  --abc-score-fill: #e4e6ea;
+  --abc-score-stroke: #e4e6ea;
+  /* Pre-inverted so that after the SVG-wide `filter: invert(1)
+   * hue-rotate(180deg)` in dark mode, the selection reads as a bright
+   * blue in the rendered score. */
+  --abc-note-selected: #ff8679;
 }
 
 .abc-gui-toolbar-host {
@@ -20,8 +78,9 @@
   flex-wrap: wrap;
   gap: 6px;
   padding: 6px;
-  background: #f0f0f0;
-  border-bottom: 1px solid #ddd;
+  background: var(--abc-surface-2);
+  border-bottom: 1px solid var(--abc-border);
+  flex-shrink: 0;
 }
 
 .abc-gui-toolbar {
@@ -34,8 +93,8 @@
   display: inline-flex;
   gap: 2px;
   padding: 2px 4px;
-  background: #fff;
-  border: 1px solid #ddd;
+  background: var(--abc-surface);
+  border: 1px solid var(--abc-border);
   border-radius: 4px;
 }
 
@@ -45,78 +104,167 @@
   padding: 0 6px;
   font-size: 14px;
   line-height: 1;
-  background: #fff;
-  border: 1px solid #ccc;
+  background: var(--abc-btn-bg);
+  border: 1px solid var(--abc-border-strong);
   border-radius: 3px;
   cursor: pointer;
-  color: #222;
+  color: var(--abc-btn-text);
 }
-.abc-gui-btn:hover { background: #eef; }
+.abc-gui-btn:hover { background: var(--abc-btn-bg-hover); }
 .abc-gui-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 .abc-gui-btn.active {
-  background: #d5e4ff;
-  border-color: #6b8fd6;
+  background: var(--abc-btn-active-bg);
+  border-color: var(--abc-btn-active-border);
 }
 
+/* Body: score + panel side-by-side. Both flex to consume all remaining
+ * height so the root host fills without overflowing. */
 .abc-gui-body {
   display: flex;
   gap: 8px;
   padding: 8px;
-  min-height: 240px;
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: stretch;
 }
 
 .abc-gui-score-host {
-  flex: 1 1 auto;
+  /* Let panes grow/shrink to fill the row: score ~60%, panel ~40% */
+  flex: 1 1 60% !important;
+  width: auto !important;
+  height: auto !important;
   min-width: 0;
-  background: #fff;
-  border: 1px solid #ddd;
+  background: var(--abc-surface);
+  border: 1px solid var(--abc-border);
   border-radius: 4px;
   padding: 8px;
-  overflow: auto;
+  box-sizing: border-box;
+  overflow: auto !important;
   cursor: pointer;
 }
 
-.abc-gui-side-host {
-  flex: 0 0 360px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* The SVG abcjs emits inside the score host sometimes carries an inline
+ * width/height matching the rendered content. That's fine — the host
+ * scrolls — but we also want to guarantee the SVG isn't constrained to
+ * `width: 100%` of a shrunken host in narrow layouts. */
+.abc-gui-score-host > svg {
+  display: block;
+  max-width: none;
+}
+
+.abc-gui-panel-host {
+  flex: 1 1 40% !important;
+  width: auto !important;
+  height: auto !important;
   min-width: 0;
-}
-
-/* Responsive: when the editor container is narrow, stack the score on top
- * and the property panel / raw view underneath so both stay readable. */
-@container (max-width: 780px) {
-  .abc-gui-body {
-    flex-direction: column;
-  }
-  .abc-gui-side-host {
-    flex: 1 1 auto;
-  }
-}
-/* Viewport fallback for browsers without container-query support. */
-@media (max-width: 780px) {
-  .abc-gui-body {
-    flex-direction: column;
-  }
-  .abc-gui-side-host {
-    flex: 1 1 auto;
-  }
-}
-
-.abc-gui-panel-host,
-.abc-gui-raw-host {
-  background: #fff;
-  border: 1px solid #ddd;
+  background: var(--abc-surface);
+  border: 1px solid var(--abc-border);
   border-radius: 4px;
   padding: 8px;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+/* Raw view is pinned below the score+panel row and spans the full width. */
+.abc-gui-raw-host {
+  display: flex;
+  flex-direction: column;
+  margin: 0 8px 8px 8px;
+  background: var(--abc-surface);
+  border: 1px solid var(--abc-border);
+  border-radius: 4px;
+  padding: 8px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  max-height: 40%;
+}
+
+.abc-gui-raw-host[hidden] {
+  display: none !important;
+}
+
+/* Narrow: stack panes vertically. The root container will scroll its inner
+ * elements but the root itself remains fixed to 100%. */
+@container (max-width: 780px) {
+  .abc-gui-root {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .abc-gui-toolbar-host {
+    width: auto;
+    box-sizing: border-box;
+    position: static;
+  }
+  .abc-gui-body {
+    width: auto;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    flex-direction: column;
+    overflow: visible;
+  }
+  .abc-gui-score-host,
+  .abc-gui-panel-host {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    height: auto !important;
+    max-height: 50vh;
+    max-height: 50dvh;
+    overflow: auto !important;
+  }
+  .abc-gui-raw-host {
+    width: auto;
+    max-height: 50vh;
+    max-height: 50dvh;
+    overflow: auto;
+  }
+  .abc-gui-score-host > svg {
+    position: static !important;
+    height: auto !important;
+  }
+}
+@media (max-width: 780px) {
+  .abc-gui-root {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .abc-gui-toolbar-host {
+    width: auto;
+    box-sizing: border-box;
+    position: static;
+  }
+  .abc-gui-body {
+    width: auto;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    flex-direction: column;
+    overflow: visible;
+  }
+  .abc-gui-score-host,
+  .abc-gui-panel-host {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    height: auto !important;
+    max-height: 50vh;
+    max-height: 50dvh;
+    overflow: auto !important;
+  }
+  .abc-gui-raw-host {
+    width: auto;
+    max-height: 50vh;
+    max-height: 50dvh;
+    overflow: auto;
+  }
+  .abc-gui-score-host > svg {
+    position: static !important;
+    height: auto !important;
+  }
 }
 
 .abc-gui-panel-empty {
-  color: #888;
+  color: var(--abc-text-muted);
   font-style: italic;
 }
 
@@ -126,10 +274,14 @@
   align-items: baseline;
   margin-bottom: 6px;
   padding-bottom: 4px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--abc-border);
 }
 .abc-gui-kind { font-weight: 600; }
-.abc-gui-range { color: #888; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+.abc-gui-range {
+  color: var(--abc-text-muted);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+}
 
 .abc-gui-row {
   display: flex;
@@ -141,7 +293,7 @@
 
 .abc-gui-label {
   min-width: 70px;
-  color: #555;
+  color: var(--abc-text-subtle);
   font-size: 12px;
 }
 
@@ -153,16 +305,17 @@
 }
 
 .abc-gui-muted {
-  color: #888;
+  color: var(--abc-text-muted);
   font-size: 12px;
 }
 
 .abc-gui-input {
   font: inherit;
   padding: 3px 6px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--abc-border-strong);
   border-radius: 3px;
-  background: #fff;
+  background: var(--abc-btn-bg);
+  color: var(--abc-text);
 }
 .abc-gui-input-small { width: 48px; }
 
@@ -170,7 +323,7 @@
   margin: 8px 0 2px;
   font-weight: 600;
   font-size: 12px;
-  color: #666;
+  color: var(--abc-text-subtle);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -186,33 +339,34 @@
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
   border-bottom: none;
-  background: #f0f0f0;
-  color: #555;
+  background: var(--abc-surface-2);
+  color: var(--abc-text-subtle);
   min-width: 28px;
 }
 
 .abc-gui-chord-tab.abc-gui-active {
-  background: #fff;
-  border-color: #bbb;
-  border-bottom-color: #fff;
-  color: #000;
+  background: var(--abc-surface);
+  border-color: var(--abc-border-strong);
+  border-bottom-color: var(--abc-surface);
+  color: var(--abc-text);
   z-index: 1;
 }
 
 .abc-gui-chord-tab-add {
   margin-left: 4px;
   color: #080;
-  border-color: #aaa;
+  border-color: var(--abc-border-strong);
 }
+.abc-gui-dark .abc-gui-chord-tab-add { color: #7cd17c; }
 
 .abc-gui-chord-pane {
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 6px;
-  border: 1px solid #bbb;
+  border: 1px solid var(--abc-border-strong);
   border-radius: 0 3px 3px 3px;
-  background: #fff;
+  background: var(--abc-surface);
   margin-bottom: 6px;
 }
 
@@ -222,17 +376,16 @@
   margin-top: 4px;
   align-self: flex-start;
 }
-.abc-gui-chord-note-remove:hover {
-  background: #fbecec;
+.abc-gui-chord-note-remove:hover { background: #fbecec; }
+.abc-gui-dark .abc-gui-chord-note-remove {
+  color: #ff8a8a;
+  border-color: #6b3a3a;
 }
+.abc-gui-dark .abc-gui-chord-note-remove:hover { background: #3b2626; }
 
 .abc-gui-deco-row { flex-wrap: wrap; }
 .abc-gui-binding-row { flex-wrap: wrap; }
 
-/* Narrow-screen tweaks: shrink the toolbar/property-panel buttons gently
- * and make the labels align to the start of the row so wrapped controls
- * group together cleanly. Tap targets stay ≥32px (Apple HIG minimum).
- */
 @container (max-width: 600px) {
   .abc-gui-toolbar-host { padding: 4px; gap: 4px; }
   .abc-gui-group { padding: 2px; }
@@ -240,7 +393,7 @@
   .abc-gui-label { min-width: 0; flex-basis: 100%; }
   .abc-gui-row { gap: 6px; }
   .abc-gui-body { padding: 6px; gap: 6px; }
-  .abc-gui-panel-host, .abc-gui-raw-host { padding: 6px; }
+  .abc-gui-panel-host, .abc-gui-raw-host, .abc-gui-score-host { padding: 6px; }
 }
 @media (max-width: 600px) {
   .abc-gui-toolbar-host { padding: 4px; gap: 4px; }
@@ -249,19 +402,19 @@
   .abc-gui-label { min-width: 0; flex-basis: 100%; }
   .abc-gui-row { gap: 6px; }
   .abc-gui-body { padding: 6px; gap: 6px; }
-  .abc-gui-panel-host, .abc-gui-raw-host { padding: 6px; }
+  .abc-gui-panel-host, .abc-gui-raw-host, .abc-gui-score-host { padding: 6px; }
 }
 
 .abc-gui-prefix {
   margin-bottom: 8px;
   padding-bottom: 4px;
-  border-bottom: 1px dashed #eee;
+  border-bottom: 1px dashed var(--abc-border);
 }
 
 .abc-gui-raw {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px dashed #ddd;
+  border-top: 1px dashed var(--abc-border);
 }
 .abc-gui-raw-input {
   width: 100%;
@@ -270,45 +423,62 @@
   font-family: ui-monospace, Menlo, monospace;
   font-size: 13px;
   padding: 4px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--abc-border-strong);
   border-radius: 3px;
+  background: var(--abc-btn-bg);
+  color: var(--abc-text);
 }
 
 .abc-gui-raw-view-textarea {
+  flex: 1 1 auto;
   width: 100%;
   box-sizing: border-box;
   min-height: 140px;
   font-family: ui-monospace, Menlo, monospace;
   font-size: 13px;
   padding: 6px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--abc-border-strong);
   border-radius: 3px;
+  background: var(--abc-btn-bg);
+  color: var(--abc-text);
+  resize: vertical;
 }
 
-/* Keep the selection clearly visible even when the textarea is NOT focused.
- * Browsers normally render the inactive selection in a dim system gray that
- * is almost invisible on a light background; forcing our own ::selection
- * color means the highlight we set from the score / property panel always
- * reads, regardless of which sub-view currently owns focus. */
 .abc-gui-raw-view-textarea::selection {
-  background: #3b82f6;
-  color: #fff;
+  background: var(--abc-selection-bg);
+  color: var(--abc-selection-text);
 }
 .abc-gui-raw-view-textarea::-moz-selection {
-  background: #3b82f6;
-  color: #fff;
+  background: var(--abc-selection-bg);
+  color: var(--abc-selection-text);
 }
-/* Chromium renders the unfocused selection only when this rule is present
- * with an explicit color — without it the selection disappears on blur. */
 .abc-gui-raw-view-textarea:not(:focus)::selection {
-  background: #3b82f6;
-  color: #fff;
+  background: var(--abc-selection-bg);
+  color: var(--abc-selection-text);
 }
 
-/* Selected element highlight. abcjs wraps each note in a <g>; we just paint
- * over the fill so the selection reads clearly with minimal specificity. */
+/* In dark mode, invert the abcjs SVG instead of rewriting fill/stroke on
+ * every path. abcjs uses a mix of filled glyphs, stroked stems, and text;
+ * blanket `fill`/`stroke` overrides break that nuance (notes become
+ * hairline outlines instead of solid shapes). A hue-preserving invert
+ * turns the black-on-white default into light-on-dark while keeping
+ * relative contrast intact, and it also handles the sheet background
+ * where abcjs draws a white rect behind the staff. */
+.abc-gui-dark .abc-gui-score-host {
+  /* Force text/elements to render black before inverting to bright white */
+  color: #000;
+}
+.abc-gui-dark .abc-gui-score-host svg {
+  filter: invert(1) hue-rotate(180deg);
+  background: transparent;
+}
+
+/* Selected element highlight — must come AFTER the dark mode overrides so
+ * the selection color wins. In dark mode the SVG is inverted (see above),
+ * so the inverse of our desired accent is used as the raw fill; after the
+ * parent `filter: invert` the user sees the accent color. */
 .abc-gui-selected,
 .abc-gui-selected * {
-  fill: #1659c7 !important;
-  stroke: #1659c7 !important;
+  fill: var(--abc-note-selected) !important;
+  stroke: var(--abc-note-selected) !important;
 }

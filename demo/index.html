@@ -13,6 +13,12 @@
     margin: 0 auto;
     padding: 12px;
     box-sizing: border-box;
+    background: var(--demo-bg, #ffffff);
+    color: var(--demo-fg, #222);
+  }
+  body.demo-dark {
+    --demo-bg: #181a1d;
+    --demo-fg: #e4e6ea;
   }
   h1 { font-size: 1.4em; margin: 0 0 6px; }
   h3 { font-size: 1em; margin: 12px 0 4px; }
@@ -25,15 +31,59 @@
     word-break: break-word;
     overflow-x: auto;
   }
+  body.demo-dark pre { background: #2c2f34; color: #e4e6ea; }
+  .demo-bar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .demo-bar button {
+    font: inherit;
+    padding: 4px 10px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+  }
+  body.demo-dark .demo-bar button {
+    background: #2c2f34;
+    color: #e4e6ea;
+    border-color: #4a4e54;
+  }
+  .demo-bar button.active {
+    background: #d5e4ff;
+    border-color: #6b8fd6;
+  }
+  body.demo-dark .demo-bar button.active {
+    background: #2d4576;
+    border-color: #5380d6;
+  }
+  /* Give the editor a fixed outer height so its internal scrollbars
+     activate when the content is taller than the host. */
+  #host {
+    height: 560px;
+    border-radius: 6px;
+  }
   @media (max-width: 600px) {
     body { padding: 8px; font-size: 13px; }
     h1 { font-size: 1.2em; }
+    #host { height: 80vh; }
   }
 </style>
 </head>
 <body>
 <h1>abc-gui WYSIWYG editor — demo</h1>
 <p>Click any element in the rendered score to edit its properties.</p>
+
+<div class="demo-bar">
+  <span>Language:</span>
+  <button id="lang-en" title="English">🇬🇧 English</button>
+  <button id="lang-hu" title="Magyar">🇭🇺 Magyar</button>
+  <span style="margin-left:12px;">Theme:</span>
+  <button id="theme-toggle" title="Toggle dark mode">🌙 Dark</button>
+</div>
 
 <div id="host"></div>
 
@@ -50,16 +100,44 @@
     "L:1/8",
     "Q:1/4=120",
     "K:G",
-    '"G"GABc d2ef|"D"g2fe d2cB|"Em"A2GF E2D2|"G"[GBd]4 z2 z2|'
+    `"G"GABc d2ef|"D"g2fe d2cB|"Em"A2GF E2D2|"G"[GBd]4 z2 z2|
+    "G"GABc d2ef|"D"g2fe d2cB|"Em"A2GF E2D2|"G"[GBd]4 z2 z2|
+    "G"GABc d2ef|"D"g2fe d2cB|"Em"A2GF E2D2|"G"[GBd]4 z2 z2|
+    "G"GABc d2ef|"D"g2fe d2cB|"Em"A2GF E2D2|"G"[GBd]4 z2 z2|`
   ].join("\n");
 
   const editor = AbcGui.mount(document.getElementById("host"), {
     value: initial,
+    locale: "en",
+    theme: "light",
+    hideRawView: true,
     onChange: (abc) => {
       document.getElementById("log").textContent = abc;
     }
   });
   document.getElementById("log").textContent = editor.getValue();
+
+  // Language switcher -----------------------------------------------
+  const enBtn = document.getElementById("lang-en");
+  const huBtn = document.getElementById("lang-hu");
+  function setLang(id) {
+    editor.setLocale(id);
+    enBtn.classList.toggle("active", id === "en");
+    huBtn.classList.toggle("active", id === "hu");
+  }
+  enBtn.addEventListener("click", () => setLang("en"));
+  huBtn.addEventListener("click", () => setLang("hu"));
+  setLang("en");
+
+  // Theme toggle ----------------------------------------------------
+  const themeBtn = document.getElementById("theme-toggle");
+  let dark = false;
+  themeBtn.addEventListener("click", () => {
+    dark = !dark;
+    editor.setTheme(dark ? "dark" : "light");
+    document.body.classList.toggle("demo-dark", dark);
+    themeBtn.textContent = dark ? "☀️ Light" : "🌙 Dark";
+  });
 </script>
 </body>
 </html>

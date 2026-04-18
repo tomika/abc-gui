@@ -1,0 +1,35 @@
+.abc-gui-root {
+  /* Light theme tokens. Dark mode overrides these below. */
+  --abc-bg: #fafafa;
+  --abc-surface: #ffffff;
+  --abc-surface-2: #f0f0f0;
+  --abc-border: #ddd;
+  --abc-border-strong: #ccc;
+  --abc-text: #222;
+  --abc-text-muted: #888;
+  --abc-text-subtle: #555;
+  --abc-btn-bg: #ffffff;
+  --abc-btn-bg-hover: #eef;
+  --abc-btn-text: #222;
+  --abc-btn-active-bg: #d5e4ff;
+  --abc-btn-active-border: #6b8fd6;
+  --abc-selection-bg: #3b82f6;
+  --abc-selection-text: #ffffff;
+  --abc-note-selected: #1659c7;
+  --abc-pane-height: 360px; /* Kept for narrow mode fallback */
+
+  display: flex;
+  flex-direction: column;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  color: var(--abc-text);
+  background: var(--abc-bg);
+  border: 1px solid var(--abc-border-strong);
+  border-radius: 6px;
+  /* Fill the host element and let children flex/scroll, root must NOT scroll */
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  container-type: inline-size;
+}

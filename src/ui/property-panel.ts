@@ -34,6 +34,7 @@ import {
   DECORATIONS
 } from "../parser/element.js";
 import { el, clear, button } from "./dom.js";
+import { Strings } from "../i18n.js";
 
 export interface Selection {
   startChar: number;
@@ -61,15 +62,51 @@ interface SelectionContext {
 export class PropertyPanel {
   private host: HTMLElement;
   private doc: AbcDocument;
+  private strings: Strings;
   private current: Selection | null = null;
   private pendingAnnotationFocusIndex: number | null = null;
   private chordActiveTab = 0;
 
-  constructor(host: HTMLElement, doc: AbcDocument) {
+  constructor(host: HTMLElement, doc: AbcDocument, strings: Strings) {
     this.host = host;
     this.doc = doc;
+    this.strings = strings;
     this.host.classList.add("abc-gui-panel");
     this.render();
+  }
+
+  setStrings(strings: Strings): void {
+    this.strings = strings;
+    this.render();
+  }
+
+  private kindLabel(k: string): string {
+    const s = this.strings.panel.kind;
+    switch (k) {
+      case "note": return s.note;
+      case "chord": return s.chord;
+      case "rest": return s.rest;
+      case "bar": return s.bar;
+      case "info-line": return s.infoLine;
+      case "inline-field": return s.inlineField;
+      default: return s.other;
+    }
+  }
+
+  /** Translate a canonical length preset (identified by its English `title`
+   *  from `ABSOLUTE_LENGTH_PRESETS`) into the active locale. */
+  private lengthTitle(p: { title: string }): string {
+    const L = this.strings.lengths;
+    switch (p.title) {
+      case "breve (double whole)": return L.breve;
+      case "whole": return L.whole;
+      case "half": return L.half;
+      case "quarter": return L.quarter;
+      case "eighth": return L.eighth;
+      case "sixteenth": return L.sixteenth;
+      case "thirty-second": return L.thirtysecond;
+      default: return p.title;
+    }
   }
 
   setSelection(
@@ -210,7 +247,7 @@ export class PropertyPanel {
     if (!this.current) {
       this.host.append(
         el("div", { class: "abc-gui-panel-empty" }, [
-          "Click a note, rest, bar, or header line to edit its properties."
+          this.strings.panel.emptyHint
         ])
       );
       return;
@@ -231,7 +268,7 @@ export class PropertyPanel {
     const kind = this.classify(core);
 
     const header = el("div", { class: "abc-gui-panel-header" }, [
-      el("span", { class: "abc-gui-kind" }, [kindLabel(kind)]),
+      el("span", { class: "abc-gui-kind" }, [this.kindLabel(kind)]),
       el("span", { class: "abc-gui-range" }, [`${startChar}…${endChar}`])
     ]);
     this.host.append(header);
@@ -616,7 +653,7 @@ export class PropertyPanel {
     };
     // Chord-level length
     this.host.append(
-      el("div", { class: "abc-gui-section-title" }, ["Chord length"]),
+      el("div", { class: "abc-gui-section-title" }, [this.strings.panel.section.chordLength]),
       this.unitLengthInfoRow(start, parsed.num, parsed.den),
       this.lengthRow(start, parsed.num, parsed.den, (n, d) => {
         applyChord({ ...parsed, num: n, den: d });
@@ -629,7 +666,7 @@ export class PropertyPanel {
     // so that editing a note's attribute (which re-renders the whole
     // panel) doesn't bounce the user back to the first tab.
     this.host.append(
-      el("div", { class: "abc-gui-section-title" }, ["Notes in chord"])
+      el("div", { class: "abc-gui-section-title" }, [this.strings.panel.section.notesInChord])
     );
     const initialTab = Math.max(
       0,
@@ -645,7 +682,7 @@ export class PropertyPanel {
       parsed.notes.forEach((n, i) => {
         const tab = button(
           writeNote(n),
-          `Edit note ${i + 1}`,
+          this.strings.panel.hints.editNote(i + 1),
           () => renderTab(i),
           { active: i === idx, className: "abc-gui-chord-tab" }
         );
@@ -653,7 +690,7 @@ export class PropertyPanel {
       });
       // Add-note "+" tab
       tabBar.append(
-        button("＋", "Add note to chord", () => {
+        button("＋", this.strings.panel.hints.addNoteToChord, () => {
           this.chordActiveTab = parsed.notes.length; // select the new note
           const next: ParsedChord = {
             ...parsed,
@@ -677,7 +714,7 @@ export class PropertyPanel {
       );
       if (parsed.notes.length > 1) {
         pane.append(
-          button("✕ Remove note", `Remove note ${idx + 1} from chord`, () => {
+          button(this.strings.panel.hints.removeNote, this.strings.panel.hints.removeNoteN(idx + 1), () => {
             // After removal, keep the tab index in range.
             this.chordActiveTab = Math.max(0, idx - 1);
             const next: ParsedChord = {
@@ -702,13 +739,14 @@ export class PropertyPanel {
       this.applyRange(start, end, writeRest(next));
     };
     const variantRow = el("div", { class: "abc-gui-row" }, [
-      el("span", { class: "abc-gui-label" }, ["Kind"])
+      el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.kind])
     ]);
+    const rv = this.strings.panel.hints.restVariant;
     const variants: { v: ParsedRest["variant"]; glyph: string; title: string }[] = [
-      { v: "z", glyph: "𝄽", title: "rest (z)" },
-      { v: "x", glyph: "×", title: "invisible rest (x)" },
-      { v: "Z", glyph: "𝄻", title: "whole-measure rest (Z)" },
-      { v: "X", glyph: "⌀", title: "invisible whole-measure rest (X)" }
+      { v: "z", glyph: "𝄽", title: rv.z },
+      { v: "x", glyph: "×", title: rv.x },
+      { v: "Z", glyph: "𝄻", title: rv.Z },
+      { v: "X", glyph: "⌀", title: rv.X }
     ];
     for (const v of variants) {
       variantRow.append(
@@ -736,10 +774,11 @@ export class PropertyPanel {
 
     const row = el("div", { class: "abc-gui-row abc-gui-bar-row" });
     for (const b of BAR_TYPES) {
+      const t = this.strings.barTypes[b.value as keyof typeof this.strings.barTypes] ?? b.title;
       row.append(
         button(
           b.label,
-          b.title,
+          t,
           () => this.applyRange(start, end, b.value),
           { active: barLine === b.value }
         )
@@ -813,17 +852,17 @@ export class PropertyPanel {
   private bindingRow(start: number, end: number): HTMLElement {
     const b = this.bindingState(start, end);
 
+    // Group / binding row (triplets, slurs, ties).
     const row = el("div", { class: "abc-gui-row abc-gui-binding-row" }, [
-      el("span", { class: "abc-gui-label" }, ["Group"])
+      el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.group])
     ]);
 
+    const hints = this.strings.panel.hints;
     // Triplet (3 — toggle by inserting/removing "(3" right before the element.
     row.append(
       button(
         "(3",
-        b.hasTriplet
-          ? "remove triplet marker"
-          : "start triplet (this note + next two)",
+        b.hasTriplet ? hints.triplet.remove : hints.triplet.add,
         () => {
           if (b.hasTriplet) {
             this.applyAround(b.leftStart - 2, b.leftStart, "", start, end);
@@ -839,9 +878,7 @@ export class PropertyPanel {
     row.append(
       button(
         "(",
-        b.hasSlurStart
-          ? "remove slur start (shortcut key: '(')"
-          : "start slur (shortcut key: '(')",
+        b.hasSlurStart ? hints.slurStart.remove : hints.slurStart.add,
         () => {
           if (b.hasSlurStart) {
             this.applyAround(b.leftStart - 1, b.leftStart, "", start, end);
@@ -857,9 +894,7 @@ export class PropertyPanel {
     row.append(
       button(
         ")",
-        b.hasSlurEnd
-          ? "remove slur end (shortcut key: ')')"
-          : "end slur (shortcut key: ')')",
+        b.hasSlurEnd ? hints.slurEnd.remove : hints.slurEnd.add,
         () => {
           if (b.hasSlurEnd) {
             this.applyAround(b.rightStart, b.rightStart + 1, "", start, end);
@@ -875,9 +910,7 @@ export class PropertyPanel {
     row.append(
       button(
         "⌒",
-        b.hasTie
-          ? "remove tie to next note (shortcut key: '-')"
-          : "tie to next note (shortcut key: '-')",
+        b.hasTie ? hints.tie.remove : hints.tie.add,
         () => {
           if (b.hasTie) {
             this.applyAround(b.tieProbe, b.tieProbe + 1, "", start, end);
@@ -944,13 +977,13 @@ export class PropertyPanel {
 
   private accidentalRow(current: Accidental, onChange: (a: Accidental) => void): HTMLElement {
     const row = el("div", { class: "abc-gui-row" }, [
-      el("span", { class: "abc-gui-label" }, ["Accidental"])
+      el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.accidental])
     ]);
     for (const a of ACCIDENTALS) {
       row.append(
         button(
           a === "" ? "∅" : ACCIDENTAL_GLYPH[a],
-          a === "" ? "no accidental" : a,
+          a === "" ? this.strings.panel.hints.noAccidental : a,
           () => onChange(a),
           { active: current === a }
         )
@@ -961,20 +994,20 @@ export class PropertyPanel {
 
   private pitchRow(current: string, onChange: (letter: string) => void): HTMLElement {
     const row = el("div", { class: "abc-gui-row" }, [
-      el("span", { class: "abc-gui-label" }, ["Pitch"])
+      el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.pitch])
     ]);
     for (const L of ["C", "D", "E", "F", "G", "A", "B"]) {
-      row.append(button(L, `pitch ${L}`, () => onChange(L), { active: current === L }));
+      row.append(button(L, this.strings.panel.hints.pitchOf(L), () => onChange(L), { active: current === L }));
     }
     return row;
   }
 
   private octaveRow(current: number, onChange: (o: number) => void): HTMLElement {
     const row = el("div", { class: "abc-gui-row" }, [
-      el("span", { class: "abc-gui-label" }, ["Octave"]),
-      button("⇊", "down octave", () => onChange(current - 1)),
+      el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.octave]),
+      button("⇊", this.strings.panel.hints.octaveDown, () => onChange(current - 1)),
       el("span", { class: "abc-gui-readout" }, [String(current)]),
-      button("⇈", "up octave", () => onChange(current + 1))
+      button("⇈", this.strings.panel.hints.octaveUp, () => onChange(current + 1))
     ]);
     return row;
   }
@@ -999,18 +1032,17 @@ export class PropertyPanel {
     const g = gcd(an, ad);
     const absolute = `${an / g}/${ad / g}`;
     return el("div", { class: "abc-gui-row abc-gui-unitlen" }, [
-      el("span", { class: "abc-gui-label" }, ["Unit (L:)"]),
+      el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.unitL]),
       el(
         "span",
         {
           class: "abc-gui-readout",
-          title:
-            "Effective unit note length at this position. L: is stateful — the most recent L: (header, body, or inline) wins."
+          title: this.strings.panel.hints.unitL
         },
         [`${L.num}/${L.den}`]
       ),
       el("span", { class: "abc-gui-muted" }, [
-        "→ note duration = ",
+        this.strings.panel.hints.noteDuration,
         absolute
       ])
     ]);
@@ -1023,7 +1055,7 @@ export class PropertyPanel {
     onChange: (n: number, d: number) => void
   ): HTMLElement {
     const row = el("div", { class: "abc-gui-row" }, [
-      el("span", { class: "abc-gui-label" }, ["Length (1..9)"])
+      el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.length])
     ]);
     // Buttons express ABSOLUTE note durations (whole, half, quarter, …) so
     // the glyph the user sees matches the actual rhythmic value regardless
@@ -1052,7 +1084,7 @@ export class PropertyPanel {
       const isBaseForDotted =
         !!dottedBase && p.num === baseAbsNum && p.den === baseAbsDen;
       row.append(
-        button(p.glyph, `${p.title} (= ${rn}/${rd} × L)`, () => onChange(rn, rd), {
+        button(p.glyph, this.strings.panel.hints.lengthPresetTitle(this.lengthTitle(p), rn, rd), () => onChange(rn, rd), {
           active: isExact || isBaseForDotted
         })
       );
@@ -1097,10 +1129,10 @@ export class PropertyPanel {
     const dottedBase = this.dottedBaseRelativeAt(offsetInDoc, num, den);
     const isDotted = !!dottedBase;
     return el("div", { class: "abc-gui-row" }, [
-      el("span", { class: "abc-gui-label" }, ["Dot (.)"]),
+      el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.dot]),
       button(
         "·",
-        "toggle dotted length (×3/2) (shortcut: .)",
+        this.strings.panel.hints.dotToggle,
         () => {
           if (dottedBase) onChange(dottedBase.num, dottedBase.den);
           else onChange(num * 3, den * 2);
@@ -1155,22 +1187,23 @@ export class PropertyPanel {
   ): HTMLElement {
     const wrap = el("div", { class: "abc-gui-prefix" });
     wrap.append(
-      el("div", { class: "abc-gui-section-title" }, ["Attached"])
+      el("div", { class: "abc-gui-section-title" }, [this.strings.panel.section.attached])
     );
 
     // Annotations / chord symbols --------------------------------------
     const annoRow = el("div", { class: "abc-gui-row" }, [
-      el("span", { class: "abc-gui-label" }, ['Chord / text'])
+      el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.chordText])
     ]);
     prefix.annotations.forEach((a, idx) => {
       const placeSel = el("select", { class: "abc-gui-input" }) as HTMLSelectElement;
+      const ann = this.strings.panel.annotation;
       for (const [v, label, title] of [
-        ["", "♩", "chord symbol"],
-        ["^", "↑", "above"],
-        ["_", "↓", "below"],
-        ["<", "←", "left"],
-        [">", "→", "right"],
-        ["@", "@", "free placement"]
+        ["", "♩", ann.chordSymbol],
+        ["^", "↑", ann.above],
+        ["_", "↓", ann.below],
+        ["<", "←", ann.left],
+        [">", "→", ann.right],
+        ["@", "@", ann.freePlacement]
       ] as const) {
         const o = el("option", { value: v, title }, [label]) as HTMLOptionElement;
         if (v === a.placement) o.selected = true;
@@ -1215,7 +1248,7 @@ export class PropertyPanel {
           this.focusEditorFromPanel();
         }
       });
-      const removeBtn = button("✕", "remove", () => {
+      const removeBtn = button("✕", this.strings.panel.hints.remove, () => {
         const next = cloneAnnotations(prefix);
         next.annotations.splice(idx, 1);
         onChange(next);
@@ -1223,7 +1256,7 @@ export class PropertyPanel {
       annoRow.append(placeSel, textInput, removeBtn);
     });
     annoRow.append(
-      button('＋"…"', "add chord symbol or annotation (shortcut: +)", () => {
+      button('＋"…"', this.strings.panel.hints.addAnnotation, () => {
         const next = cloneAnnotations(prefix);
         this.pendingAnnotationFocusIndex = next.annotations.length;
         next.annotations.push({ raw: '""', placement: "", text: "" });
@@ -1238,17 +1271,17 @@ export class PropertyPanel {
     // that decoration; click on an inactive one adds it. The active
     // styling already conveys "click to remove" — no extra ✕ glyph.
     const decoRow = el("div", { class: "abc-gui-row abc-gui-deco-row" }, [
-      el("span", { class: "abc-gui-label" }, ["Decorations"])
+      el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.decorations])
     ]);
     for (const d of DECORATIONS) {
       const isActive = prefix.decorations.includes(d.name);
-      const shortcutHint = "";
+      const locTitle = (this.strings.decorations as Record<string, string>)[d.name] ?? d.title;
       decoRow.append(
         button(
           d.symbol,
           isActive
-            ? `remove ${d.title}${shortcutHint}`
-            : `add ${d.title}${shortcutHint}`,
+            ? this.strings.panel.hints.removeX(locTitle)
+            : locTitle,
           () => {
             const next = cloneDecorations(prefix);
             if (isActive) {
@@ -1270,7 +1303,7 @@ export class PropertyPanel {
       decoRow.append(
         button(
           name,
-          `remove ${name}`,
+          this.strings.panel.hints.removeX(name),
           () => {
             const next = cloneDecorations(prefix);
             const idx = next.decorations.indexOf(name);
@@ -1285,12 +1318,12 @@ export class PropertyPanel {
 
     // Grace notes ------------------------------------------------------
     const graceRow = el("div", { class: "abc-gui-row" }, [
-      el("span", { class: "abc-gui-label" }, ["Grace"])
+      el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.grace])
     ]);
     const graceInput = el("input", {
       class: "abc-gui-input",
       value: prefix.grace ?? "",
-      placeholder: "e.g. cd"
+      placeholder: this.strings.panel.grace.placeholder
     }) as HTMLInputElement;
     graceInput.addEventListener("change", () => {
       const next = cloneGrace(prefix);
@@ -1300,7 +1333,7 @@ export class PropertyPanel {
     graceRow.append(graceInput);
     if (prefix.grace !== null) {
       graceRow.append(
-        button("✕", "remove grace notes", () => {
+        button("✕", this.strings.panel.hints.removeGraceNotes, () => {
           const next = cloneGrace(prefix);
           next.grace = null;
           onChange(next);
@@ -1385,14 +1418,15 @@ export class PropertyPanel {
     });
 
     const clefSel = el("select", { class: "abc-gui-input" }) as HTMLSelectElement;
+    const ck = this.strings.panel.keyEditor;
     for (const [val, label] of [
-      ["", "clef: (none)"],
-      ["treble", "clef: treble"],
-      ["bass", "clef: bass"],
-      ["alto", "clef: alto"],
-      ["tenor", "clef: tenor"],
-      ["perc", "clef: percussion"],
-      ["none", "clef: none"]
+      ["", ck.clefNone],
+      ["treble", ck.clefTreble],
+      ["bass", ck.clefBass],
+      ["alto", ck.clefAlto],
+      ["tenor", ck.clefTenor],
+      ["perc", ck.clefPerc],
+      ["none", ck.clefNoneExplicit]
     ] as const) {
       const o = el("option", { value: val }, [label]) as HTMLOptionElement;
       if (val === clef) o.selected = true;
@@ -1413,7 +1447,7 @@ export class PropertyPanel {
     ]);
     for (const preset of ["2/4", "3/4", "4/4", "6/8", "9/8", "12/8", "C", "C|"]) {
       row.append(
-        button(preset, `meter ${preset}`, () => onChange(preset), {
+        button(preset, this.strings.panel.hints.meterPreset(preset), () => onChange(preset), {
           active: value === preset
         })
       );
@@ -1433,7 +1467,7 @@ export class PropertyPanel {
     ]);
     for (const preset of ["1/1", "1/2", "1/4", "1/8", "1/16", "1/32"]) {
       row.append(
-        button(preset, `unit length ${preset}`, () => onChange(preset), {
+        button(preset, this.strings.panel.hints.unitLengthPreset(preset), () => onChange(preset), {
           active: value === preset
         })
       );
@@ -1483,7 +1517,7 @@ export class PropertyPanel {
   private buildRawEditor(raw: string, start: number, end: number): HTMLElement {
     const wrap = el("div", { class: "abc-gui-raw" });
     wrap.append(
-      el("div", { class: "abc-gui-section-title" }, ["Raw element text"])
+      el("div", { class: "abc-gui-section-title" }, [this.strings.panel.section.rawElement])
     );
     const ta = el("textarea", { class: "abc-gui-raw-input" }) as HTMLTextAreaElement;
     ta.value = raw;
@@ -1594,17 +1628,7 @@ export class PropertyPanel {
   }
 }
 
-function kindLabel(k: string): string {
-  switch (k) {
-    case "note": return "♪ Note";
-    case "chord": return "♫ Chord";
-    case "rest": return "𝄽 Rest";
-    case "bar": return "∣ Bar line";
-    case "info-line": return "≡ Info field";
-    case "inline-field": return "[≡] Inline field";
-    default: return "• Element";
-  }
-}
+// kindLabel moved into PropertyPanel as a strings-aware method.
 
 function gcd(a: number, b: number): number {
   a = Math.abs(a);

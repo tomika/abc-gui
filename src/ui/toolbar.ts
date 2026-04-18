@@ -11,6 +11,7 @@
 
 import { AbcDocument } from "../model/document.js";
 import { button, el } from "./dom.js";
+import { Strings } from "../i18n.js";
 
 export interface ToolbarDeps {
   doc: AbcDocument;
@@ -21,6 +22,12 @@ export interface ToolbarDeps {
    *  user can edit the text freely without the panel jumping around. */
   getRawSelectEnabled: () => boolean;
   setRawSelectEnabled: (enabled: boolean) => void;
+  /** Raw-text pane visibility. The pane can be hidden entirely via the
+   *  toolbar; when hidden, the raw-select binding button is irrelevant
+   *  and so is also hidden. */
+  isRawVisible: () => boolean;
+  toggleRawVisible: () => void;
+  onRawVisibilityChange: (cb: () => void) => void;
   /** MIDI playback. When `playSupported` is false the buttons are disabled. */
   playSupported: boolean;
   isPlaying: () => boolean;
@@ -30,6 +37,8 @@ export interface ToolbarDeps {
   onPlaybackStateChange: (cb: () => void) => void;
   /** Subscribe to selection changes so the toolbar can toggle the delete button. */
   onSelectionChange: (cb: () => void) => void;
+  /** Localized strings. */
+  strings: Strings;
 }
 
 interface InsertSpec {
@@ -65,104 +74,80 @@ export class Toolbar {
   private playBtn: HTMLButtonElement | null = null;
   private stopBtn: HTMLButtonElement | null = null;
   private rawSelectBtn: HTMLButtonElement | null = null;
+  private toggleRawBtn: HTMLButtonElement | null = null;
+  private modeGroup: HTMLElement | null = null;
   private insertSpecs: ReadonlyArray<InsertSpec> = [];
   private headerSpecs: ReadonlyArray<InsertSpec> = [];
+  private strings: Strings;
 
   constructor(host: HTMLElement, deps: ToolbarDeps) {
     this.host = host;
     this.deps = deps;
+    this.strings = deps.strings;
     this.host.classList.add("abc-gui-toolbar");
     this.render();
     // Refresh undo/redo enabled state whenever the document changes.
     this.deps.doc.on(() => this.updateHistoryButtons());
     this.deps.onPlaybackStateChange(() => this.updatePlaybackButtons());
     this.deps.onSelectionChange(() => this.updateHistoryButtons());
+    this.deps.onRawVisibilityChange(() => this.updateRawSelectButton());
     this.updateHistoryButtons();
     this.updatePlaybackButtons();
     this.updateRawSelectButton();
   }
 
   private render(): void {
-    const undoBtn = button("↶", "undo (Ctrl+Z)", () => this.deps.doc.undo());
-    const redoBtn = button("↷", "redo (Ctrl+Shift+Z)", () => this.deps.doc.redo());
+    this.host.innerHTML = "";
+    const s = this.strings;
+    const undoBtn = button("↶", s.toolbar.undo, () => this.deps.doc.undo());
+    const redoBtn = button("↷", s.toolbar.redo, () => this.deps.doc.redo());
     this.undoBtn = undoBtn;
     this.redoBtn = redoBtn;
-    const deleteBtn = button(
-      "✖",
-      "delete selected element (Delete: select next, Backspace: select previous)",
-      () => this.deleteSelection()
-    );
+    const deleteBtn = button("✖", s.toolbar.delete, () => this.deleteSelection());
     this.deleteBtn = deleteBtn;
-    const historyGroup = el("div", { class: "abc-gui-group", title: "History" });
+    const historyGroup = el("div", { class: "abc-gui-group", title: s.toolbar.groups.history });
     historyGroup.append(undoBtn, redoBtn, deleteBtn);
 
-    const playBtn = button("▶", "play (from selected note, or from start)", () =>
-      this.deps.play()
-    );
-    const stopBtn = button("■", "stop playback", () => this.deps.stop());
+    const playBtn = button("▶", s.toolbar.play, () => this.deps.play());
+    const stopBtn = button("■", s.toolbar.stop, () => this.deps.stop());
     playBtn.disabled = !this.deps.playSupported;
     stopBtn.disabled = !this.deps.playSupported;
     this.playBtn = playBtn;
     this.stopBtn = stopBtn;
-    const playbackGroup = el("div", { class: "abc-gui-group", title: "Playback" });
+    const playbackGroup = el("div", { class: "abc-gui-group", title: s.toolbar.groups.playback });
     playbackGroup.append(playBtn, stopBtn);
 
-    const rawSelectBtn = button(
-      "⇌",
-      "toggle raw-text → element selection (when off, you can edit the raw ABC freely without the panel jumping around)",
-      () => {
-        this.deps.setRawSelectEnabled(!this.deps.getRawSelectEnabled());
-        this.updateRawSelectButton();
-      }
-    );
+    const rawSelectBtn = button("⇌", s.toolbar.rawSelectOn, () => {
+      this.deps.setRawSelectEnabled(!this.deps.getRawSelectEnabled());
+      this.updateRawSelectButton();
+    });
     this.rawSelectBtn = rawSelectBtn;
-    const modeGroup = el("div", { class: "abc-gui-group", title: "Modes" });
-    modeGroup.append(rawSelectBtn);
-
-    const shiftHint = " (Shift: insert before selection)";
+    const toggleRawBtn = button("📝", s.toolbar.showRaw, () => {
+      this.deps.toggleRawVisible();
+      this.updateRawSelectButton();
+    });
+    this.toggleRawBtn = toggleRawBtn;
+    const modeGroup = el("div", { class: "abc-gui-group", title: s.toolbar.groups.modes });
+    modeGroup.append(toggleRawBtn, rawSelectBtn);
+    this.modeGroup = modeGroup;
 
     this.insertSpecs = [
-      {
-        glyph: "♪",
-        title: "insert note (N; inserts C)" + shiftHint,
-        snippet: "C",
-        hotkeys: ["N"]
-      },
-      {
-        glyph: "𝄽",
-        title: "insert rest (Z)" + shiftHint,
-        snippet: "z",
-        hotkeys: ["Z"]
-      },
-      {
-        glyph: "[♪]",
-        title: "insert chord (H)" + shiftHint,
-        snippet: "[CEG]",
-        hotkeys: ["H"]
-      },
-      {
-        glyph: "∣",
-        title: "insert bar line (I)" + shiftHint,
-        snippet: "|",
-        hotkeys: ["I"]
-      },
-      { glyph: "‖", title: "insert double bar" + shiftHint, snippet: "||" },
+      { glyph: "♪", title: s.toolbar.insert.note, snippet: "C", hotkeys: ["N"] },
+      { glyph: "𝄽", title: s.toolbar.insert.rest, snippet: "z", hotkeys: ["Z"] },
+      { glyph: "[♪]", title: s.toolbar.insert.chord, snippet: "[CEG]", hotkeys: ["H"] },
+      { glyph: "∣", title: s.toolbar.insert.bar, snippet: "|", hotkeys: ["I"] },
+      { glyph: "‖", title: s.toolbar.insert.doubleBar, snippet: "||" },
       {
         glyph: "|:",
-        title: "insert start-repeat ([); default is before, Shift inserts after",
+        title: s.toolbar.insert.startRepeat,
         snippet: "|:",
         defaultBefore: true,
         hotkeys: ["[", "{"]
       },
-      {
-        glyph: ":|",
-        title: "insert end-repeat (])" + shiftHint,
-        snippet: ":|",
-        hotkeys: ["]", "}"]
-      },
+      { glyph: ":|", title: s.toolbar.insert.endRepeat, snippet: ":|", hotkeys: ["]", "}"] },
       {
         glyph: "↵",
-        title: "insert line break (Enter; split current line at selection); Shift+Enter removes nearest line break",
+        title: s.toolbar.insert.lineBreak,
         snippet: "\n",
         lineBreak: true,
         hotkeys: ["Enter"]
@@ -172,80 +157,37 @@ export class Toolbar {
     this.headerSpecs = [
       {
         glyph: "X:",
-        title: "new tune header (X)" + shiftHint,
+        title: s.toolbar.header.newTune,
         snippet: "X:1\nT:Untitled\nM:4/4\nL:1/8\nK:C",
         infoField: true,
         hotkeys: ["X"]
       },
-      {
-        glyph: "T:",
-        title: "insert title field (T)" + shiftHint,
-        snippet: "T:Title",
-        infoField: true,
-        hotkeys: ["T"]
-      },
-      {
-        glyph: "C:",
-        title: "insert composer field (C)" + shiftHint,
-        snippet: "C:Composer",
-        infoField: true,
-        hotkeys: ["C"]
-      },
-      {
-        glyph: "R:",
-        title: "insert rhythm field (R)" + shiftHint,
-        snippet: "R:Rhythm",
-        infoField: true,
-        hotkeys: ["R"]
-      },
-      {
-        glyph: "K:",
-        title: "insert key field (K)" + shiftHint,
-        snippet: "K:C",
-        infoField: true,
-        hotkeys: ["K"]
-      },
-      {
-        glyph: "M:",
-        title: "insert meter field (M)" + shiftHint,
-        snippet: "M:4/4",
-        infoField: true,
-        hotkeys: ["M"]
-      },
-      {
-        glyph: "L:",
-        title: "insert unit length field (L)" + shiftHint,
-        snippet: "L:1/8",
-        infoField: true,
-        hotkeys: ["L"]
-      },
-      {
-        glyph: "Q:",
-        title: "insert tempo field (Q)" + shiftHint,
-        snippet: "Q:1/4=120",
-        infoField: true,
-        hotkeys: ["Q"]
-      },
-      {
-        glyph: "V:",
-        title: "insert voice field (V)" + shiftHint,
-        snippet: "V:1",
-        infoField: true,
-        hotkeys: ["V"]
-      }
+      { glyph: "T:", title: s.toolbar.header.title, snippet: "T:Title", infoField: true, hotkeys: ["T"] },
+      { glyph: "C:", title: s.toolbar.header.composer, snippet: "C:Composer", infoField: true, hotkeys: ["C"] },
+      { glyph: "R:", title: s.toolbar.header.rhythm, snippet: "R:Rhythm", infoField: true, hotkeys: ["R"] },
+      { glyph: "K:", title: s.toolbar.header.key, snippet: "K:C", infoField: true, hotkeys: ["K"] },
+      { glyph: "M:", title: s.toolbar.header.meter, snippet: "M:4/4", infoField: true, hotkeys: ["M"] },
+      { glyph: "L:", title: s.toolbar.header.unitLength, snippet: "L:1/8", infoField: true, hotkeys: ["L"] },
+      { glyph: "Q:", title: s.toolbar.header.tempo, snippet: "Q:1/4=120", infoField: true, hotkeys: ["Q"] },
+      { glyph: "V:", title: s.toolbar.header.voice, snippet: "V:1", infoField: true, hotkeys: ["V"] }
     ];
 
     this.host.append(
       historyGroup,
       playbackGroup,
       modeGroup,
-      // Insert group: only standalone score elements live here. Note/rest
-      // properties — accidentals, length, ties, slurs, triplets, grace
-      // notes, chord symbols, annotations, and decorations — are edited
-      // via the property panel of the selected note instead.
-      this.group("Insert", this.insertSpecs),
-      this.group("Header", this.headerSpecs)
+      this.group(s.toolbar.groups.insert, this.insertSpecs),
+      this.group(s.toolbar.groups.header, this.headerSpecs)
     );
+  }
+
+  /** Swap localized strings. Rebuilds the toolbar DOM. */
+  setStrings(strings: Strings): void {
+    this.strings = strings;
+    this.render();
+    this.updateHistoryButtons();
+    this.updatePlaybackButtons();
+    this.updateRawSelectButton();
   }
 
   /** Trigger one of the insert/header actions via keyboard hotkey. */
@@ -287,12 +229,25 @@ export class Toolbar {
   }
 
   private updateRawSelectButton(): void {
-    if (!this.rawSelectBtn) return;
-    const on = this.deps.getRawSelectEnabled();
-    this.rawSelectBtn.classList.toggle("active", on);
-    this.rawSelectBtn.title = on
-      ? "raw-text → element selection: ON (click to disable for free-form raw editing)"
-      : "raw-text → element selection: OFF (click to re-enable caret-based selection)";
+    const rawVisible = this.deps.isRawVisible();
+    if (this.toggleRawBtn) {
+      this.toggleRawBtn.classList.toggle("active", rawVisible);
+      this.toggleRawBtn.title = rawVisible
+        ? this.strings.toolbar.hideRaw
+        : this.strings.toolbar.showRaw;
+    }
+    if (this.rawSelectBtn) {
+      // The raw-select binding toggle is meaningless when the raw pane is
+      // hidden; hide it rather than leaving a stale control in place.
+      this.rawSelectBtn.hidden = !rawVisible;
+      if (rawVisible) {
+        const on = this.deps.getRawSelectEnabled();
+        this.rawSelectBtn.classList.toggle("active", on);
+        this.rawSelectBtn.title = on
+          ? this.strings.toolbar.rawSelectOn
+          : this.strings.toolbar.rawSelectOff;
+      }
+    }
   }
 
   private group(name: string, specs: ReadonlyArray<InsertSpec>): HTMLElement {

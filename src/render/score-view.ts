@@ -130,6 +130,18 @@ export class ScoreView {
     // `renderAbc` returns an array of TuneObjects (one per `X:`). Keep the
     // first so the editor can reuse it for MIDI synthesis / timing queries.
     this.lastTune = Array.isArray(result) ? result[0] ?? null : null;
+    // abcjs overwrites inline styles on the render target to implement its
+    // `responsive: "resize"` aspect-ratio trick — notably a huge
+    // `padding-bottom` and `height: 100%` that together make the host div
+    // grow to match the rendered SVG's aspect ratio, blowing past our fixed
+    // pane size. Restore the scroll-critical styles so the host stays a
+    // stable, scrollable box.
+    const hostStyle = this.host.style;
+    hostStyle.paddingBottom = "";
+    hostStyle.height = "";
+    hostStyle.overflow = "";
+    hostStyle.overflowX = "auto";
+    hostStyle.overflowY = "auto";
     this.applySelectionStyle();
     for (const l of [...this.renderListeners]) l();
   }

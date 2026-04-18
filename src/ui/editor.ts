@@ -9,12 +9,17 @@ import { PropertyPanel, Selection } from "./property-panel.js";
 import { Toolbar } from "./toolbar.js";
 import { RawView } from "./raw-view.js";
 import { el } from "./dom.js";
+import { LocaleId, Strings, resolveStrings } from "../i18n.js";
 
 export interface AbcEditorOptions {
   value?: string;
   onChange?: (abc: string) => void;
   /** hide the raw text pane (default: false) */
   hideRawView?: boolean;
+  /** UI language. Either a built-in id ("en", "hu") or a full Strings object. */
+  locale?: LocaleId | Strings;
+  /** Visual theme for the editor; defaults to "light". */
+  theme?: "light" | "dark";
 }
 
 export class AbcEditor {
@@ -24,6 +29,9 @@ export class AbcEditor {
   private panel: PropertyPanel;
   private toolbar: Toolbar;
   private raw: RawView | null = null;
+  private rawHost: HTMLElement | null = null;
+  private rawVisible = false;
+  private rawVisibilityListeners: (() => void)[] = [];
   private currentSelection: Selection | null = null;
   /** abcjs CSS classes for the currently selected SVG group (when known).
    *  Cached so we can re-highlight the same element after a re-render
@@ -38,6 +46,7 @@ export class AbcEditor {
   private selectionListeners: (() => void)[] = [];
   private rawSelectEnabled = true;
   private pendingFocusAfterRender = false;
+  private strings: Strings;
 
   constructor(container: HTMLElement, opts: AbcEditorOptions = {}) {
     this.container = container;
@@ -45,22 +54,30 @@ export class AbcEditor {
     if (this.container.tabIndex < 0) this.container.tabIndex = 0;
     this.container.innerHTML = "";
 
+    this.strings = resolveStrings(opts.locale);
+    this.applyTheme(opts.theme ?? "light");
+
     this.doc = new AbcDocument(opts.value ?? "");
 
     const toolbarHost = el("div", { class: "abc-gui-toolbar-host" });
     const body = el("div", { class: "abc-gui-body" });
     const scoreHost = el("div", { class: "abc-gui-score-host" });
-    const sideHost = el("div", { class: "abc-gui-side-host" });
     const panelHost = el("div", { class: "abc-gui-panel-host" });
     const rawHost = el("div", { class: "abc-gui-raw-host" });
+    this.rawHost = rawHost;
 
-    sideHost.append(panelHost);
-    if (!opts.hideRawView) sideHost.append(rawHost);
-    body.append(scoreHost, sideHost);
-    this.container.append(toolbarHost, body);
+    body.append(scoreHost, panelHost);
+    // Raw pane sits below the body so it can span the full container width
+    // instead of being squeezed into the side column. It is always inserted
+    // in the DOM so the user can toggle it on/off via the toolbar, but
+    // `hidden` removes it from layout completely when not visible.
+    this.container.append(toolbarHost, body, rawHost);
+    this.rawVisible = !opts.hideRawView;
+    rawHost.hidden = !this.rawVisible;
+    this.updateRawLayoutState();
 
     this.score = new ScoreView(scoreHost, this.doc);
-    this.panel = new PropertyPanel(panelHost, this.doc);
+    this.panel = new PropertyPanel(panelHost, this.doc, this.strings);
     this.player = new MidiPlayer();
     // Any re-render invalidates the primed synth buffer so playback always
     // reflects the latest ABC source.
@@ -86,12 +103,16 @@ export class AbcEditor {
       setRawSelectEnabled: (v) => {
         this.rawSelectEnabled = v;
       },
+      isRawVisible: () => this.rawVisible,
+      toggleRawVisible: () => this.toggleRawVisible(),
+      onRawVisibilityChange: (cb) => this.rawVisibilityListeners.push(cb),
       playSupported: MidiPlayer.isSupported(),
       isPlaying: () => this.player.isPlaying(),
       play: () => this.handlePlay(),
       stop: () => this.handleStop(),
       onPlaybackStateChange: (cb) => this.playbackListeners.push(cb),
-      onSelectionChange: (cb) => this.selectionListeners.push(cb)
+      onSelectionChange: (cb) => this.selectionListeners.push(cb),
+      strings: this.strings
     });
 
     this.score.onSelect((ev) => this.handleScoreClick(ev));
@@ -267,6 +288,47 @@ export class AbcEditor {
     this.score.destroy();
     this.container.innerHTML = "";
     this.container.classList.remove("abc-gui-root");
+    this.container.classList.remove("abc-gui-dark");
+    this.container.classList.remove("abc-gui-raw-hidden");
+  }
+
+  /** Switch UI language. Accepts a built-in locale id or full Strings. */
+  setLocale(locale: LocaleId | Strings): void {
+    this.strings = resolveStrings(locale);
+    this.toolbar.setStrings(this.strings);
+    this.panel.setStrings(this.strings);
+  }
+
+  /** Switch visual theme. */
+  setTheme(theme: "light" | "dark"): void {
+    this.applyTheme(theme);
+  }
+
+  private applyTheme(theme: "light" | "dark"): void {
+    this.container.classList.toggle("abc-gui-dark", theme === "dark");
+  }
+
+  /** Show/hide the raw-text pane. Constructs/destroys the RawView lazily. */
+  private toggleRawVisible(): void {
+    this.rawVisible = !this.rawVisible;
+    if (this.rawHost) this.rawHost.hidden = !this.rawVisible;
+    if (this.rawVisible && !this.raw && this.rawHost) {
+      this.raw = new RawView(this.rawHost, this.doc);
+      this.raw.onCaret((start, end) => this.handleRawCaret(start, end));
+      if (this.currentSelection) {
+        this.raw.highlightRange(
+          this.currentSelection.startChar,
+          this.currentSelection.endChar
+        );
+      }
+    }
+    this.updateRawLayoutState();
+    for (const l of [...this.rawVisibilityListeners]) l();
+  }
+
+  /** Keep layout classes in sync with raw-pane visibility. */
+  private updateRawLayoutState(): void {
+    this.container.classList.toggle("abc-gui-raw-hidden", !this.rawVisible);
   }
 
   // Internal -----------------------------------------------------
