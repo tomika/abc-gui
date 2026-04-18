@@ -175,42 +175,55 @@
   letter-spacing: 0.04em;
 }
 
-.abc-gui-chord-note-row {
+.abc-gui-chord-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: 0;
+}
+
+.abc-gui-chord-tab {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom: none;
+  background: #f0f0f0;
+  color: #555;
+  min-width: 28px;
+}
+
+.abc-gui-chord-tab.abc-gui-active {
+  background: #fff;
+  border-color: #bbb;
+  border-bottom-color: #fff;
+  color: #000;
+  z-index: 1;
+}
+
+.abc-gui-chord-tab-add {
+  margin-left: 4px;
+  color: #080;
+  border-color: #aaa;
+}
+
+.abc-gui-chord-pane {
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 6px;
-  border: 1px dashed #ddd;
-  border-radius: 3px;
+  border: 1px solid #bbb;
+  border-radius: 0 3px 3px 3px;
+  background: #fff;
   margin-bottom: 6px;
-  background: #fafafa;
-}
-
-.abc-gui-chord-note-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2px;
-  padding-bottom: 2px;
-  border-bottom: 1px solid #eee;
-}
-
-.abc-gui-chord-note-title {
-  font-weight: 600;
-  font-size: 12px;
-  color: #444;
 }
 
 .abc-gui-chord-note-remove {
   color: #a33;
   border-color: #d8a8a8;
+  margin-top: 4px;
+  align-self: flex-start;
 }
 .abc-gui-chord-note-remove:hover {
   background: #fbecec;
-}
-
-.abc-gui-chord-add {
-  margin-top: 4px;
 }
 
 .abc-gui-deco-row { flex-wrap: wrap; }

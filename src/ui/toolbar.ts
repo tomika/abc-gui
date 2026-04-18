@@ -28,6 +28,8 @@ export interface ToolbarDeps {
   stop: () => void;
   /** Subscribe to playback-state changes so the toolbar can toggle icons. */
   onPlaybackStateChange: (cb: () => void) => void;
+  /** Subscribe to selection changes so the toolbar can toggle the delete button. */
+  onSelectionChange: (cb: () => void) => void;
 }
 
 interface InsertSpec {
@@ -57,6 +59,7 @@ export class Toolbar {
   private deps: ToolbarDeps;
   private undoBtn: HTMLButtonElement | null = null;
   private redoBtn: HTMLButtonElement | null = null;
+  private deleteBtn: HTMLButtonElement | null = null;
   private playBtn: HTMLButtonElement | null = null;
   private stopBtn: HTMLButtonElement | null = null;
   private rawSelectBtn: HTMLButtonElement | null = null;
@@ -69,6 +72,7 @@ export class Toolbar {
     // Refresh undo/redo enabled state whenever the document changes.
     this.deps.doc.on(() => this.updateHistoryButtons());
     this.deps.onPlaybackStateChange(() => this.updatePlaybackButtons());
+    this.deps.onSelectionChange(() => this.updateHistoryButtons());
     this.updateHistoryButtons();
     this.updatePlaybackButtons();
     this.updateRawSelectButton();
@@ -79,8 +83,10 @@ export class Toolbar {
     const redoBtn = button("↷", "redo (Ctrl+Shift+Z)", () => this.deps.doc.redo());
     this.undoBtn = undoBtn;
     this.redoBtn = redoBtn;
+    const deleteBtn = button("✖", "delete selected element", () => this.deleteSelection());
+    this.deleteBtn = deleteBtn;
     const historyGroup = el("div", { class: "abc-gui-group", title: "History" });
-    historyGroup.append(undoBtn, redoBtn);
+    historyGroup.append(undoBtn, redoBtn, deleteBtn);
 
     const playBtn = button("▶", "play (from selected note, or from start)", () =>
       this.deps.play()
@@ -152,6 +158,20 @@ export class Toolbar {
   private updateHistoryButtons(): void {
     if (this.undoBtn) this.undoBtn.disabled = !this.deps.doc.canUndo();
     if (this.redoBtn) this.redoBtn.disabled = !this.deps.doc.canRedo();
+    if (this.deleteBtn) {
+      const sel = this.deps.getSelection();
+      this.deleteBtn.disabled = !sel || sel.startChar === sel.endChar;
+    }
+  }
+
+  private deleteSelection(): void {
+    const sel = this.deps.getSelection();
+    if (!sel) return;
+    const start = Math.min(sel.startChar, sel.endChar);
+    const end = Math.max(sel.startChar, sel.endChar);
+    if (start === end) return;
+    this.deps.doc.replace(start, end, "");
+    this.deps.setSelection({ startChar: start, endChar: start });
   }
 
   private updatePlaybackButtons(): void {

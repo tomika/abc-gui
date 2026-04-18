@@ -46,6 +46,7 @@ export class PropertyPanel {
   private doc: AbcDocument;
   private current: Selection | null = null;
   private pendingAnnotationFocusIndex: number | null = null;
+  private chordActiveTab = 0;
 
   constructor(host: HTMLElement, doc: AbcDocument) {
     this.host = host;
@@ -54,7 +55,23 @@ export class PropertyPanel {
     this.render();
   }
 
-  setSelection(sel: Selection | null): void {
+  setSelection(
+    sel: Selection | null,
+    opts: { preserveChordTab?: boolean } = {}
+  ): void {
+    // When the selection moves to a different element, reset the chord
+    // tab index so a freshly-clicked chord starts on its first note.
+    if (
+      !opts.preserveChordTab &&
+      (
+        !sel ||
+        !this.current ||
+        sel.startChar !== this.current.startChar ||
+        sel.endChar !== this.current.endChar
+      )
+    ) {
+      this.chordActiveTab = 0;
+    }
     this.current = sel;
     this.render();
   }
@@ -164,7 +181,7 @@ export class PropertyPanel {
     }
     if (s.startsWith("[") && s.includes("]")) return "chord";
     if (/^[zxZX]/.test(s)) return "rest";
-    if (/^[|:\[\].]/.test(s[0]!) && /^[|:\[\].0-9]+$/.test(s)) return "bar";
+    if (/^[|:\[\].]/.test(s[0]!) && /^[|:\[\].0-9,\-]+$/.test(s)) return "bar";
     if (readNote(s, 0)) return "note";
     return "other";
   }
@@ -209,57 +226,73 @@ export class PropertyPanel {
         applyChord({ ...parsed, num: n, den: d });
       })
     );
-    // Per-note list
+    // Per-note tab view. The active tab index is persisted on the panel
+    // so that editing a note's attribute (which re-renders the whole
+    // panel) doesn't bounce the user back to the first tab.
     this.host.append(
       el("div", { class: "abc-gui-section-title" }, ["Notes in chord"])
     );
-    parsed.notes.forEach((note, idx) => {
-      const row = el("div", { class: "abc-gui-chord-note-row" });
+    const initialTab = Math.max(
+      0,
+      Math.min(this.chordActiveTab, parsed.notes.length - 1)
+    );
+    const tabBar = el("div", { class: "abc-gui-chord-tabs" });
+    const pane = el("div", { class: "abc-gui-chord-pane" });
+
+    const renderTab = (idx: number) => {
+      this.chordActiveTab = idx;
+      // Rebuild tab buttons
+      clear(tabBar);
+      parsed.notes.forEach((n, i) => {
+        const tab = button(
+          writeNote(n),
+          `Edit note ${i + 1}`,
+          () => renderTab(i),
+          { active: i === idx, className: "abc-gui-chord-tab" }
+        );
+        tabBar.append(tab);
+      });
+      // Add-note "+" tab
+      tabBar.append(
+        button("＋", "Add note to chord", () => {
+          this.chordActiveTab = parsed.notes.length; // select the new note
+          const next: ParsedChord = {
+            ...parsed,
+            notes: [...parsed.notes, { accidental: "", letter: "C", octave: 0, num: 1, den: 1 }]
+          };
+          applyChord(next);
+        }, { className: "abc-gui-chord-tab abc-gui-chord-tab-add" })
+      );
+      // Rebuild pane content
+      clear(pane);
+      const note = parsed.notes[idx];
       const update = (patch: Partial<ParsedNote>) => {
-        const next: ParsedChord = { ...parsed };
-        next.notes = parsed.notes.slice();
+        const next: ParsedChord = { ...parsed, notes: parsed.notes.slice() };
         next.notes[idx] = { ...note, ...patch };
         applyChord(next);
       };
-      // Header row with an explicit "Note N" label and a prominent remove
-      // button so the remove action is always visible regardless of how the
-      // accidental / pitch / octave rows below wrap.
-      const noteLabel = writeNote(note);
-      const header = el("div", { class: "abc-gui-chord-note-header" }, [
-        el("span", { class: "abc-gui-chord-note-title" }, [
-          `Note ${idx + 1}`,
-          el("span", { class: "abc-gui-muted" }, [` (${noteLabel})`])
-        ]),
-        button(
-          "✕",
-          `Remove note ${idx + 1} (${noteLabel}) from chord`,
-          () => {
-            if (parsed.notes.length <= 1) return;
-            const next: ParsedChord = { ...parsed };
-            next.notes = parsed.notes.filter((_, i) => i !== idx);
-            applyChord(next);
-          },
-          { className: "abc-gui-chord-note-remove" }
-        )
-      ]);
-      row.append(
-        header,
+      pane.append(
         this.accidentalRow(note.accidental, (a) => update({ accidental: a })),
         this.pitchRow(note.letter, (l) => update({ letter: l })),
         this.octaveRow(note.octave, (o) => update({ octave: o }))
       );
-      this.host.append(row);
-    });
-    this.host.append(
-      button("＋ Add note", "Add note to chord", () => {
-        const next: ParsedChord = { ...parsed };
-        next.notes = [
-          ...parsed.notes,
-          { accidental: "", letter: "C", octave: 0, num: 1, den: 1 }
-        ];
-        applyChord(next);
-      }, { className: "abc-gui-chord-add" })
-    );
+      if (parsed.notes.length > 1) {
+        pane.append(
+          button("✕ Remove note", `Remove note ${idx + 1} from chord`, () => {
+            // After removal, keep the tab index in range.
+            this.chordActiveTab = Math.max(0, idx - 1);
+            const next: ParsedChord = {
+              ...parsed,
+              notes: parsed.notes.filter((_, i) => i !== idx)
+            };
+            applyChord(next);
+          }, { className: "abc-gui-chord-note-remove" })
+        );
+      }
+    };
+
+    renderTab(initialTab);
+    this.host.append(tabBar, pane);
   }
 
   private renderRestEditor(raw: string, start: number, end: number) {
@@ -296,6 +329,9 @@ export class PropertyPanel {
 
   private renderBarEditor(raw: string, start: number, end: number) {
     const current = raw.trim();
+    // Strip trailing volta numbers (e.g. |:1,2,3 → |:) for button matching.
+    const barLine = current.replace(/[0-9,\-]+$/, "");
+
     const row = el("div", { class: "abc-gui-row abc-gui-bar-row" });
     for (const b of BAR_TYPES) {
       row.append(
@@ -303,7 +339,7 @@ export class PropertyPanel {
           b.label,
           b.title,
           () => this.applyRange(start, end, b.value),
-          { active: current === b.value }
+          { active: barLine === b.value }
         )
       );
     }

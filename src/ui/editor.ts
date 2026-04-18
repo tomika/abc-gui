@@ -34,6 +34,7 @@ export class AbcEditor {
   private keydownHandler: ((ev: KeyboardEvent) => void) | null = null;
   private player: MidiPlayer;
   private playbackListeners: (() => void)[] = [];
+  private selectionListeners: (() => void)[] = [];
   private rawSelectEnabled = true;
 
   constructor(container: HTMLElement, opts: AbcEditorOptions = {}) {
@@ -82,7 +83,8 @@ export class AbcEditor {
       isPlaying: () => this.player.isPlaying(),
       play: () => this.handlePlay(),
       stop: () => this.handleStop(),
-      onPlaybackStateChange: (cb) => this.playbackListeners.push(cb)
+      onPlaybackStateChange: (cb) => this.playbackListeners.push(cb),
+      onSelectionChange: (cb) => this.selectionListeners.push(cb)
     });
 
     this.score.onSelect((ev) => this.handleScoreClick(ev));
@@ -100,7 +102,9 @@ export class AbcEditor {
         // highlight stays visible after a property-panel-driven edit
         // re-renders the score.
         this.score.setSelected(this.currentSelection, this.currentClasses);
-        this.panel.setSelection(this.currentSelection);
+        this.panel.setSelection(this.currentSelection, {
+          preserveChordTab: true
+        });
         if (this.currentSelection && this.raw) {
           this.raw.highlightRange(
             this.currentSelection.startChar,
@@ -311,6 +315,7 @@ export class AbcEditor {
     if (this.raw && sel) {
       this.raw.highlightRange(sel.startChar, sel.endChar);
     }
+    for (const l of [...this.selectionListeners]) l();
   }
 
   private handlePlay(): void {
