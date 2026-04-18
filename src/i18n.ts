@@ -60,6 +60,8 @@ export interface Strings {
       removeX: (name: string) => string;
       removeGraceNotes: string;
       addAnnotation: string;
+      pickChordSymbol: string;
+      pickChordNotes: string;
       noAccidental: string;
       editNote: (index: number) => string;
       addNoteToChord: string;
@@ -237,6 +239,8 @@ export const en: Strings = {
       removeX: (name) => `remove ${name}`,
       removeGraceNotes: "remove grace notes",
       addAnnotation: "add chord symbol or annotation (shortcut: +)",
+      pickChordSymbol: "Pick chord symbol…",
+      pickChordNotes: "Pick chord notes…",
       noAccidental: "no accidental",
       editNote: (i) => `Edit note ${i}`,
       addNoteToChord: "Add note to chord",
@@ -420,6 +424,8 @@ export const hu: Strings = {
       removeGraceNotes: "előkék eltávolítása",
       addAnnotation:
         "akkordszimbólum vagy felirat hozzáadása (gyorsbillentyű: +)",
+      pickChordSymbol: "Akkordszimbólum választása…",
+      pickChordNotes: "Akkordhangok választása…",
       noAccidental: "nincs módosítójel",
       editNote: (i) => `${i}. hang szerkesztése`,
       addNoteToChord: "Hang hozzáadása az akkordhoz",

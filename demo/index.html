@@ -113,7 +113,17 @@
     hideRawView: true,
     onChange: (abc) => {
       document.getElementById("log").textContent = abc;
-    }
+    },
+    chordEditor: async (chord) => {
+      // This is just a dummy implementation for demo purposes. A real chord editor
+      // would show a UI for the user to edit the chord and return the updated
+      // values.
+      console.log("Edit chord:", chord);
+      return {
+        chordName: "Cm7",
+        chordMidiValues: [60, 63, 67, 70], // C min 7
+      };
+    },
   });
   document.getElementById("log").textContent = editor.getValue();
 

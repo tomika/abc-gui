@@ -42,6 +42,19 @@ export interface Selection {
   abcelem?: AbcElement | null;
 }
 
+/**
+ * External chord-picker callback. When provided to the editor, a "…"
+ * button is shown next to the chord-symbol add button and next to the
+ * chord-note add button. The callback is invoked with the current chord
+ * text (annotation text or raw chord notes) and should resolve with the
+ * new chord name (used when adding a chord symbol annotation) and the
+ * MIDI note values (used when updating the notes inside a `[...]`
+ * chord).
+ */
+export type ChordEditorCallback = (
+  chord: string
+) => Promise<{ chordName: string; chordMidiValues: number[] }>;
+
 interface SelectionContext {
   selStart: number;
   selEnd: number;
@@ -66,11 +79,18 @@ export class PropertyPanel {
   private current: Selection | null = null;
   private pendingAnnotationFocusIndex: number | null = null;
   private chordActiveTab = 0;
+  private chordEditor: ChordEditorCallback | null = null;
 
-  constructor(host: HTMLElement, doc: AbcDocument, strings: Strings) {
+  constructor(
+    host: HTMLElement,
+    doc: AbcDocument,
+    strings: Strings,
+    chordEditor: ChordEditorCallback | null = null
+  ) {
     this.host = host;
     this.doc = doc;
     this.strings = strings;
+    this.chordEditor = chordEditor;
     this.host.classList.add("abc-gui-panel");
     this.render();
   }
@@ -699,6 +719,27 @@ export class PropertyPanel {
           applyChord(next);
         }, { className: "abc-gui-chord-tab abc-gui-chord-tab-add" })
       );
+      if (this.chordEditor) {
+        tabBar.append(
+          button("…", this.strings.panel.hints.pickChordNotes, () => {
+            const cb = this.chordEditor;
+            if (!cb) return;
+            // Seed the picker with the chord's current notes written back
+            // to ABC form (no brackets, no length) so the callback can
+            // recognize the current pitch content.
+            const seed = parsed.notes
+              .map((n) => writeNote({ ...n, num: 1, den: 1 }))
+              .join("");
+            cb(seed).then((res) => {
+              if (!res || !Array.isArray(res.chordMidiValues)) return;
+              const newNotes = res.chordMidiValues.map(midiToNote);
+              if (newNotes.length === 0) return;
+              this.chordActiveTab = 0;
+              applyChord({ ...parsed, notes: newNotes });
+            }).catch(() => { /* user cancelled */ });
+          }, { className: "abc-gui-chord-tab" })
+        );
+      }
       // Rebuild pane content
       clear(pane);
       const note = parsed.notes[idx];
@@ -1253,7 +1294,27 @@ export class PropertyPanel {
         next.annotations.splice(idx, 1);
         onChange(next);
       });
-      annoRow.append(placeSel, textInput, removeBtn);
+      annoRow.append(placeSel, textInput);
+      if (this.chordEditor && a.placement === "") {
+        annoRow.append(
+          button("…", this.strings.panel.hints.pickChordSymbol, () => {
+            const cb = this.chordEditor;
+            if (!cb) return;
+            cb(textInput.value).then((res) => {
+              if (!res || typeof res.chordName !== "string") return;
+              const next = cloneAnnotations(prefix);
+              next.annotations[idx] = {
+                ...a,
+                placement: "",
+                text: res.chordName,
+                raw: ""
+              };
+              onChange(next);
+            }).catch(() => { /* user cancelled */ });
+          })
+        );
+      }
+      annoRow.append(removeBtn);
     });
     annoRow.append(
       button('＋"…"', this.strings.panel.hints.addAnnotation, () => {
@@ -1767,4 +1828,26 @@ function cloneDecorations(p: ElementPrefix): ElementPrefix {
 }
 function cloneGrace(p: ElementPrefix): ElementPrefix {
   return { ...p };
+}
+
+/**
+ * Convert a MIDI pitch number to a ParsedNote using ABC's octave convention
+ * (octave 0 = "C" = MIDI 60). Naturals are preferred; chromatic pitches
+ * are spelled with sharps.
+ */
+function midiToNote(midi: number): ParsedNote {
+  const offset = Math.round(midi) - 60;
+  const octave = Math.floor(offset / 12);
+  const semitone = ((offset % 12) + 12) % 12;
+  const table: Array<[string, Accidental]> = [
+    ["C", ""], ["C", "^"],
+    ["D", ""], ["D", "^"],
+    ["E", ""],
+    ["F", ""], ["F", "^"],
+    ["G", ""], ["G", "^"],
+    ["A", ""], ["A", "^"],
+    ["B", ""]
+  ];
+  const [letter, accidental] = table[semitone]!;
+  return { accidental, letter, octave, num: 1, den: 1 };
 }

@@ -20,6 +20,8 @@ export interface AbcEditorOptions {
   locale?: LocaleId | Strings;
   /** Visual theme for the editor; defaults to "light". */
   theme?: "light" | "dark";
+  /** Chord editor callback */
+  chordEditor?: (chord: string) => Promise<{ chordName: string; chordMidiValues: number[] }>;
 }
 
 export class AbcEditor {
@@ -77,7 +79,7 @@ export class AbcEditor {
     this.updateRawLayoutState();
 
     this.score = new ScoreView(scoreHost, this.doc);
-    this.panel = new PropertyPanel(panelHost, this.doc, this.strings);
+    this.panel = new PropertyPanel(panelHost, this.doc, this.strings, opts.chordEditor ?? null);
     this.player = new MidiPlayer();
     // Any re-render invalidates the primed synth buffer so playback always
     // reflects the latest ABC source.
