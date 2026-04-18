@@ -2,11 +2,33 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>abc-gui demo</title>
 <link rel="stylesheet" href="../dist/abc-gui.css" />
 <style>
-  body { font: 14px system-ui; max-width: 1100px; margin: 20px auto; padding: 0 12px; }
-  pre { background: #f4f4f4; padding: 8px; border-radius: 4px; min-height: 80px; }
+  html, body { margin: 0; }
+  body {
+    font: 14px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 12px;
+    box-sizing: border-box;
+  }
+  h1 { font-size: 1.4em; margin: 0 0 6px; }
+  h3 { font-size: 1em; margin: 12px 0 4px; }
+  pre {
+    background: #f4f4f4;
+    padding: 8px;
+    border-radius: 4px;
+    min-height: 80px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: auto;
+  }
+  @media (max-width: 600px) {
+    body { padding: 8px; font-size: 13px; }
+    h1 { font-size: 1.2em; }
+  }
 </style>
 </head>
 <body>
@@ -41,3 +63,4 @@
 </script>
 </body>
 </html>
+

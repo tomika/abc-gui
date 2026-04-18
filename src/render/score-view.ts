@@ -184,7 +184,19 @@ function classListToSelector(classes: string): string {
         c !== "abcjs-decoration" &&
         c !== "abcjs-chord" &&
         c !== "abcjs-annotation"
-    );
+    )
+    // Drop the dynamic `_selected` flag classes abcjs adds to the SVG group
+    // when the user clicks an element. After a re-render those classes are
+    // gone, so leaving them in our selector would prevent the selection
+    // from being re-applied to the new SVG.
+    .filter((c) => !c.endsWith("_selected"))
+    // Drop intrinsic-property classes (`abcjs-d<duration>`, `abcjs-p<pitch>`)
+    // that change when the user edits the element via the property panel
+    // (e.g. flipping pitch, length, adding a triplet that re-scales the
+    // duration). The remaining positional classes (`abcjs-l<line>`,
+    // `abcjs-m<measure>`, `abcjs-mm<measureTotal>`, `abcjs-v<voice>`,
+    // `abcjs-n<noteIndexInMeasure>`) survive in-place edits.
+    .filter((c) => !/^abcjs-[dp][0-9]/.test(c));
   if (parts.length === 0) return "";
   const esc =
     typeof CSS !== "undefined" && typeof CSS.escape === "function"
