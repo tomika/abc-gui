@@ -3,9 +3,10 @@
  * inserts a snippet after the current selection (or at end of document if
  * nothing is selected). Shift-click inserts BEFORE the selection instead.
  *
- * Info-field buttons (the "Header" group) always land on their own line:
- * the snippet is placed at the nearest line boundary so it never splits an
- * existing music / header line or ends up mid-line.
+ * Info-field buttons (the "Header" group) and the line-break button always
+ * land on their own line: the snippet is inserted at the current selection
+ * position and the surrounding text is split with newlines as needed, so
+ * the positional meaning of fields like K:, M:, L:, V:, … is preserved.
  */
 
 import { AbcDocument } from "../model/document.js";
@@ -36,8 +37,19 @@ interface InsertSpec {
   title: string;
   /** raw snippet inserted around the selection */
   snippet: string;
-  /** true → place snippet on its own line (info fields) */
+  /** true → place snippet on its own line (info fields). The snippet is
+   *  inserted at the current selection position, and the surrounding text
+   *  is split with newlines as needed so the snippet ends up on a line of
+   *  its own. The selection's character offsets retain their meaning, so
+   *  positional info fields like K:, M:, L:, [V:n] etc. land where the
+   *  user expects. */
   infoField?: boolean;
+  /** true → snippet is a bare newline whose only job is to split the line
+   *  at the current selection position. */
+  lineBreak?: boolean;
+  /** true → insert before the selection by default; Shift inserts after
+   *  (reverses the normal Shift-to-insert-before convention). */
+  defaultBefore?: boolean;
 }
 
 export class Toolbar {
@@ -99,34 +111,24 @@ export class Toolbar {
       historyGroup,
       playbackGroup,
       modeGroup,
+      // Insert group: only standalone score elements live here. Note/rest
+      // properties — accidentals, length, ties, slurs, triplets, grace
+      // notes, chord symbols, annotations, and decorations — are edited
+      // via the property panel of the selected note instead.
       this.group("Insert", [
         { glyph: "♪", title: "insert note (C)" + shiftHint, snippet: "C" },
         { glyph: "𝄽", title: "insert rest" + shiftHint, snippet: "z" },
         { glyph: "[♪]", title: "insert chord" + shiftHint, snippet: "[CEG]" },
         { glyph: "∣", title: "insert bar line" + shiftHint, snippet: "|" },
         { glyph: "‖", title: "insert double bar" + shiftHint, snippet: "||" },
-        { glyph: "|:", title: "insert start-repeat" + shiftHint, snippet: "|:" },
+        { glyph: "|:", title: "insert start-repeat (hold Shift to insert after selection)", snippet: "|:", defaultBefore: true },
         { glyph: ":|", title: "insert end-repeat" + shiftHint, snippet: ":|" },
-        { glyph: "(3", title: "insert triplet" + shiftHint, snippet: "(3" },
-        { glyph: "⌒", title: "insert tie" + shiftHint, snippet: "-" },
-        { glyph: "(…)", title: "insert slur" + shiftHint, snippet: "()" },
-        { glyph: "{♪}", title: "insert grace-note group" + shiftHint, snippet: "{c}" }
-      ]),
-      this.group("Accidental", [
-        { glyph: "♯", title: "sharp" + shiftHint, snippet: "^" },
-        { glyph: "♭", title: "flat" + shiftHint, snippet: "_" },
-        { glyph: "♮", title: "natural" + shiftHint, snippet: "=" }
-      ]),
-      this.group("Annotation", [
-        { glyph: '"Am"', title: "insert chord symbol" + shiftHint, snippet: '"Am"' },
-        { glyph: '"^…"', title: "insert above annotation" + shiftHint, snippet: '"^text"' },
-        { glyph: '"_…"', title: "insert below annotation" + shiftHint, snippet: '"_text"' }
-      ]),
-      this.group("Decoration", [
-        { glyph: "·", title: "staccato" + shiftHint, snippet: "!staccato!" },
-        { glyph: "𝄐", title: "fermata" + shiftHint, snippet: "!fermata!" },
-        { glyph: "𝆖", title: "trill" + shiftHint, snippet: "!trill!" },
-        { glyph: ">", title: "accent" + shiftHint, snippet: "!>!" }
+        {
+          glyph: "↵",
+          title: "insert line break (split current line at the selection); hold Shift to remove the nearest line break instead",
+          snippet: "\n",
+          lineBreak: true
+        }
       ]),
       this.group("Header", [
         {
@@ -174,7 +176,7 @@ export class Toolbar {
     const g = el("div", { class: "abc-gui-group", title: name });
     for (const spec of specs) {
       g.append(
-        button(spec.glyph, spec.title, (ev) => this.insert(spec, ev.shiftKey))
+        button(spec.glyph, spec.title, (ev) => this.insert(spec, spec.defaultBefore ? !ev.shiftKey : ev.shiftKey))
       );
     }
     return g;
@@ -185,19 +187,54 @@ export class Toolbar {
     const doc = this.deps.doc;
     const src = doc.value;
 
+    if (spec.lineBreak) {
+      if (before) {
+        // Shift: remove the newline closest to the current selection range.
+        const rangeStart = sel ? Math.min(sel.startChar, sel.endChar) : src.length;
+        const rangeEnd = sel ? Math.max(sel.startChar, sel.endChar) : src.length;
+
+        // If a newline is inside the selected range, remove that one first.
+        let nlPos = src.indexOf("\n", rangeStart);
+        if (nlPos < 0 || nlPos > rangeEnd) {
+          const prev = src.lastIndexOf("\n", Math.max(0, rangeStart - 1));
+          const next = src.indexOf("\n", rangeEnd);
+          const prevDist = prev >= 0 ? rangeStart - prev : Number.POSITIVE_INFINITY;
+          const nextDist = next >= 0 ? next - rangeEnd : Number.POSITIVE_INFINITY;
+          nlPos = prevDist <= nextDist ? prev : next;
+        }
+        if (nlPos < 0) return;
+        doc.replace(nlPos, nlPos + 1, "");
+        this.deps.setSelection({ startChar: nlPos, endChar: nlPos });
+        return;
+      }
+      // A bare line break: just insert the snippet at the current position.
+      // No wrapping — the snippet IS the newline.
+      const anchor = sel ? (before ? sel.startChar : sel.endChar) : src.length;
+      doc.replace(anchor, anchor, spec.snippet);
+      const afterBreak = anchor + spec.snippet.length;
+      const next = this.findNextElementAfter(afterBreak);
+      if (next) {
+        this.deps.setSelection(next);
+      } else {
+        // Fallback: place a caret after the inserted newline.
+        this.deps.setSelection({ startChar: afterBreak, endChar: afterBreak });
+      }
+      return;
+    }
+
     if (spec.infoField) {
       // Info fields must live on their own line. Pin the insertion point to
-      // a line boundary and wrap the snippet with the newlines needed to
-      // keep surrounding content intact.
+      // the current selection position (preserving the positional meaning of
+      // K:/M:/L:/V: etc.) and surround the snippet with the newlines needed
+      // to keep it on a line of its own — splitting the surrounding line if
+      // the anchor is mid-line.
       const anchor = sel ? (before ? sel.startChar : sel.endChar) : src.length;
-      const pos = before ? startOfLine(src, anchor) : endOfLine(src, anchor);
-      const needLeadingNL =
-        pos > 0 && src[pos - 1] !== "\n" ? "\n" : "";
+      const needLeadingNL = anchor > 0 && src[anchor - 1] !== "\n" ? "\n" : "";
       const needTrailingNL =
-        pos < src.length && src[pos] !== "\n" ? "\n" : "";
+        anchor < src.length && src[anchor] !== "\n" ? "\n" : "";
       const text = needLeadingNL + spec.snippet + needTrailingNL;
-      doc.replace(pos, pos, text);
-      const selStart = pos + needLeadingNL.length;
+      doc.replace(anchor, anchor, text);
+      const selStart = anchor + needLeadingNL.length;
       this.deps.setSelection({
         startChar: selStart,
         endChar: selStart + spec.snippet.length
@@ -221,16 +258,18 @@ export class Toolbar {
       });
     }
   }
-}
 
-function startOfLine(src: string, offset: number): number {
-  let s = Math.max(0, Math.min(offset, src.length));
-  while (s > 0 && src[s - 1] !== "\n") s--;
-  return s;
-}
-
-function endOfLine(src: string, offset: number): number {
-  let e = Math.max(0, Math.min(offset, src.length));
-  while (e < src.length && src[e] !== "\n") e++;
-  return e;
+  /** Find the next parsed music element whose start is at/after `offset`. */
+  private findNextElementAfter(
+    offset: number
+  ): { startChar: number; endChar: number } | null {
+    let best: { startChar: number; endChar: number } | null = null;
+    this.deps.doc.forEachElement((el) => {
+      if (el.startChar < offset) return;
+      if (!best || el.startChar < best.startChar) {
+        best = { startChar: el.startChar, endChar: el.endChar };
+      }
+    });
+    return best;
+  }
 }

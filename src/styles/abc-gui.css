@@ -214,6 +214,30 @@
 }
 
 .abc-gui-deco-row { flex-wrap: wrap; }
+.abc-gui-binding-row { flex-wrap: wrap; }
+
+/* Narrow-screen tweaks: shrink the toolbar/property-panel buttons gently
+ * and make the labels align to the start of the row so wrapped controls
+ * group together cleanly. Tap targets stay ≥32px (Apple HIG minimum).
+ */
+@container (max-width: 600px) {
+  .abc-gui-toolbar-host { padding: 4px; gap: 4px; }
+  .abc-gui-group { padding: 2px; }
+  .abc-gui-btn { min-width: 32px; height: 32px; padding: 0 4px; }
+  .abc-gui-label { min-width: 0; flex-basis: 100%; }
+  .abc-gui-row { gap: 6px; }
+  .abc-gui-body { padding: 6px; gap: 6px; }
+  .abc-gui-panel-host, .abc-gui-raw-host { padding: 6px; }
+}
+@media (max-width: 600px) {
+  .abc-gui-toolbar-host { padding: 4px; gap: 4px; }
+  .abc-gui-group { padding: 2px; }
+  .abc-gui-btn { min-width: 32px; height: 32px; padding: 0 4px; }
+  .abc-gui-label { min-width: 0; flex-basis: 100%; }
+  .abc-gui-row { gap: 6px; }
+  .abc-gui-body { padding: 6px; gap: 6px; }
+  .abc-gui-panel-host, .abc-gui-raw-host { padding: 6px; }
+}
 
 .abc-gui-prefix {
   margin-bottom: 8px;

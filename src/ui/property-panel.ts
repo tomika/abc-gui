@@ -45,6 +45,7 @@ export class PropertyPanel {
   private host: HTMLElement;
   private doc: AbcDocument;
   private current: Selection | null = null;
+  private pendingAnnotationFocusIndex: number | null = null;
 
   constructor(host: HTMLElement, doc: AbcDocument) {
     this.host = host;
@@ -112,6 +113,10 @@ export class PropertyPanel {
           this.applyRange(startChar, coreStart, prefixText);
         })
       );
+      // Group / binding row (triplets, slurs, ties) — these tokens live
+      // OUTSIDE the element span abcjs reports, so we edit them through
+      // the document directly while keeping the element selected.
+      this.host.append(this.bindingRow(startChar, endChar));
     }
 
     switch (kind) {
@@ -183,7 +188,7 @@ export class PropertyPanel {
       this.lengthRow(start, parsed.num, parsed.den, (n, d) =>
         apply({ num: n, den: d })
       ),
-      this.dotRow(parsed.num, parsed.den, (n, d) => apply({ num: n, den: d }))
+      this.dotRow(start, parsed.num, parsed.den, (n, d) => apply({ num: n, den: d }))
     );
   }
 
@@ -200,7 +205,7 @@ export class PropertyPanel {
       this.lengthRow(start, parsed.num, parsed.den, (n, d) => {
         applyChord({ ...parsed, num: n, den: d });
       }),
-      this.dotRow(parsed.num, parsed.den, (n, d) => {
+      this.dotRow(start, parsed.num, parsed.den, (n, d) => {
         applyChord({ ...parsed, num: n, den: d });
       })
     );
@@ -359,6 +364,122 @@ export class PropertyPanel {
     // below still lets the user modify the span freely.
   }
 
+  /**
+   * Group / binding row for a note, chord, or rest. These tokens — triplet
+   * marker `(3`, slur start `(`, slur end `)`, and tie `-` — live OUTSIDE
+   * the element span abcjs reports (they are span-level, not element-level
+   * syntax), so we detect them by inspecting the raw source immediately
+   * before/after the element and toggle them via `applyAround` so the
+   * element stays selected after the edit.
+   */
+  private bindingRow(start: number, end: number): HTMLElement {
+    const v = this.doc.value;
+
+    // Find the nearest non-whitespace position to the LEFT of `start` so we
+    // can recognize triplet/slur prefixes that the user spaced apart.
+    let leftEnd = start; // exclusive end of the gap
+    let leftStart = start;
+    while (leftStart > 0 && (v[leftStart - 1] === " " || v[leftStart - 1] === "\t")) {
+      leftStart--;
+    }
+    // Triplet: "(3" immediately before (skipping whitespace).
+    const hasTriplet =
+      leftStart >= 2 &&
+      v[leftStart - 2] === "(" &&
+      v[leftStart - 1] === "3";
+    // Slur start: "(" immediately before (and NOT followed by a digit so we
+    // don't confuse it with a tuplet marker).
+    const hasSlurStart =
+      !hasTriplet &&
+      leftStart >= 1 &&
+      v[leftStart - 1] === "(" &&
+      !(leftStart < v.length && /[0-9]/.test(v[leftStart] ?? ""));
+
+    // Find the nearest non-whitespace position to the RIGHT of `end`.
+    let rightStart = end;
+    while (rightStart < v.length && (v[rightStart] === " " || v[rightStart] === "\t")) {
+      rightStart++;
+    }
+    const hasSlurEnd = v[rightStart] === ")";
+    // Tie: "-" attached after the element (possibly after a slur close).
+    let tieProbe = rightStart;
+    if (v[tieProbe] === ")") tieProbe++;
+    while (tieProbe < v.length && (v[tieProbe] === " " || v[tieProbe] === "\t")) tieProbe++;
+    const hasTie = v[tieProbe] === "-";
+
+    const row = el("div", { class: "abc-gui-row abc-gui-binding-row" }, [
+      el("span", { class: "abc-gui-label" }, ["Group"])
+    ]);
+
+    // Triplet (3 — toggle by inserting/removing "(3" right before the element.
+    row.append(
+      button(
+        "(3",
+        hasTriplet
+          ? "remove triplet marker"
+          : "start triplet (this note + next two)",
+        () => {
+          if (hasTriplet) {
+            this.applyAround(leftStart - 2, leftStart, "", start, end);
+          } else {
+            this.applyAround(start, start, "(3", start, end);
+          }
+        },
+        { active: hasTriplet }
+      )
+    );
+
+    // Slur start (
+    row.append(
+      button(
+        "(",
+        hasSlurStart ? "remove slur start" : "start slur",
+        () => {
+          if (hasSlurStart) {
+            this.applyAround(leftStart - 1, leftStart, "", start, end);
+          } else {
+            this.applyAround(start, start, "(", start, end);
+          }
+        },
+        { active: hasSlurStart }
+      )
+    );
+
+    // Slur end )
+    row.append(
+      button(
+        ")",
+        hasSlurEnd ? "remove slur end" : "end slur",
+        () => {
+          if (hasSlurEnd) {
+            this.applyAround(rightStart, rightStart + 1, "", start, end);
+          } else {
+            this.applyAround(end, end, ")", start, end);
+          }
+        },
+        { active: hasSlurEnd }
+      )
+    );
+
+    // Tie ⌒ (suffix `-`)
+    row.append(
+      button(
+        "⌒",
+        hasTie ? "remove tie to next note" : "tie to next note",
+        () => {
+          if (hasTie) {
+            this.applyAround(tieProbe, tieProbe + 1, "", start, end);
+          } else {
+            this.applyAround(end, end, "-", start, end);
+          }
+        },
+        { active: hasTie }
+      )
+    );
+
+    return row;
+  }
+
   // ------------------------------------------------------------------
   // Reusable widgets
   // ------------------------------------------------------------------
@@ -454,6 +575,14 @@ export class PropertyPanel {
     const g0 = gcd(num * L.num, den * L.den);
     const absNum = (num * L.num) / g0;
     const absDen = (den * L.den) / g0;
+    const dottedBase = this.dottedBaseRelativeAt(offsetInDoc, num, den);
+    let baseAbsNum = absNum;
+    let baseAbsDen = absDen;
+    if (dottedBase) {
+      const gb = gcd(dottedBase.num * L.num, dottedBase.den * L.den);
+      baseAbsNum = (dottedBase.num * L.num) / gb;
+      baseAbsDen = (dottedBase.den * L.den) / gb;
+    }
     for (const p of ABSOLUTE_LENGTH_PRESETS) {
       // relative length = absolute ÷ L
       const relN = p.num * L.den;
@@ -461,9 +590,12 @@ export class PropertyPanel {
       const gr = gcd(relN, relD);
       const rn = relN / gr;
       const rd = relD / gr;
+      const isExact = p.num === absNum && p.den === absDen;
+      const isBaseForDotted =
+        !!dottedBase && p.num === baseAbsNum && p.den === baseAbsDen;
       row.append(
         button(p.glyph, `${p.title} (= ${rn}/${rd} × L)`, () => onChange(rn, rd), {
-          active: p.num === absNum && p.den === absDen
+          active: isExact || isBaseForDotted
         })
       );
     }
@@ -491,31 +623,65 @@ export class PropertyPanel {
     return row;
   }
 
-  /** Toggle a dotted rhythm (multiply num by 3, den by 2 — or inverse).
-   *  A fraction is dotted iff, in lowest terms, num = 3 and den is even
-   *  (i.e. equals 3/2 × 1/2^k). Examples: 3/2, 3/4, 3/8, 3/16. 9/8 is NOT
-   *  dotted (reduced numerator = 9). */
+  /** Toggle dotted rhythm against known base-length presets.
+   *
+   * We treat a value as dotted when it matches (base × 3/2) for one of the
+   * panel's canonical base presets at the current effective L:. This avoids
+   * false negatives like 3/1 (dotted quarter when L:1/8), which the old
+   * "3/even" heuristic misses.
+   */
   private dotRow(
+    offsetInDoc: number,
     num: number,
     den: number,
     onChange: (n: number, d: number) => void
   ): HTMLElement {
-    const g = gcd(num, den);
-    const rn = num / g;
-    const rd = den / g;
-    const isDotted = rn === 3 && rd % 2 === 0;
+    const dottedBase = this.dottedBaseRelativeAt(offsetInDoc, num, den);
+    const isDotted = !!dottedBase;
     return el("div", { class: "abc-gui-row" }, [
       el("span", { class: "abc-gui-label" }, ["Dot"]),
       button(
         "·",
         "toggle dotted length (×3/2)",
         () => {
-          if (isDotted) onChange(num / 3, den / 2);
+          if (dottedBase) onChange(dottedBase.num, dottedBase.den);
           else onChange(num * 3, den * 2);
         },
         { active: isDotted }
       )
     ]);
+  }
+
+  /**
+   * If current relative length equals (presetBase × 3/2) at this position's
+   * effective L:, return that base relative fraction; otherwise null.
+   */
+  private dottedBaseRelativeAt(
+    offsetInDoc: number,
+    num: number,
+    den: number
+  ): { num: number; den: number } | null {
+    const cg = gcd(num, den);
+    const cnum = num / cg;
+    const cden = den / cg;
+    const L = this.doc.unitLengthAt(offsetInDoc);
+    for (const p of ABSOLUTE_LENGTH_PRESETS) {
+      // Base in source-relative terms: base = presetAbsolute ÷ L.
+      const relN = p.num * L.den;
+      const relD = p.den * L.num;
+      const rg = gcd(relN, relD);
+      const bnum = relN / rg;
+      const bden = relD / rg;
+
+      // Dotted candidate = base × 3/2.
+      const dotN = bnum * 3;
+      const dotD = bden * 2;
+      const dg = gcd(dotN, dotD);
+      if (dotN / dg === cnum && dotD / dg === cden) {
+        return { num: bnum, den: bden };
+      }
+    }
+    return null;
   }
 
   /**
@@ -556,6 +722,14 @@ export class PropertyPanel {
         class: "abc-gui-input",
         value: a.text
       }) as HTMLInputElement;
+      if (this.pendingAnnotationFocusIndex === idx) {
+        // Defer focus until the row has been attached to the document.
+        queueMicrotask(() => {
+          textInput.focus();
+          textInput.setSelectionRange(0, textInput.value.length);
+        });
+        this.pendingAnnotationFocusIndex = null;
+      }
       const fire = () => {
         const next = cloneAnnotations(prefix);
         next.annotations[idx] = {
@@ -578,6 +752,7 @@ export class PropertyPanel {
     annoRow.append(
       button('＋"…"', "add chord symbol or annotation", () => {
         const next = cloneAnnotations(prefix);
+        this.pendingAnnotationFocusIndex = next.annotations.length;
         next.annotations.push({ raw: '""', placement: "", text: "" });
         onChange(next);
       })
@@ -585,34 +760,51 @@ export class PropertyPanel {
     wrap.append(annoRow);
 
     // Decorations ------------------------------------------------------
+    // Render every supported decoration in canonical order, highlighting
+    // the ones already attached. Click on a highlighted button removes
+    // that decoration; click on an inactive one adds it. The active
+    // styling already conveys "click to remove" — no extra ✕ glyph.
     const decoRow = el("div", { class: "abc-gui-row abc-gui-deco-row" }, [
       el("span", { class: "abc-gui-label" }, ["Decorations"])
     ]);
-    prefix.decorations.forEach((name, idx) => {
-      const meta = DECORATIONS.find((d) => d.name === name);
+    for (const d of DECORATIONS) {
+      const isActive = prefix.decorations.includes(d.name);
       decoRow.append(
         button(
-          (meta ? meta.symbol : name) + " ✕",
+          d.symbol,
+          isActive ? `remove ${d.title}` : `add ${d.title}`,
+          () => {
+            const next = cloneDecorations(prefix);
+            if (isActive) {
+              const idx = next.decorations.indexOf(d.name);
+              if (idx >= 0) next.decorations.splice(idx, 1);
+            } else {
+              next.decorations.push(d.name);
+            }
+            onChange(next);
+          },
+          { active: isActive }
+        )
+      );
+    }
+    // Any non-canonical decorations (custom !names!) appear after the
+    // standard set so the user can still remove them; click to remove.
+    prefix.decorations.forEach((name) => {
+      if (DECORATIONS.some((d) => d.name === name)) return;
+      decoRow.append(
+        button(
+          name,
           `remove ${name}`,
           () => {
             const next = cloneDecorations(prefix);
-            next.decorations.splice(idx, 1);
+            const idx = next.decorations.indexOf(name);
+            if (idx >= 0) next.decorations.splice(idx, 1);
             onChange(next);
           },
           { active: true }
         )
       );
     });
-    for (const d of DECORATIONS) {
-      if (prefix.decorations.includes(d.name)) continue;
-      decoRow.append(
-        button(d.symbol, `add ${d.title}`, () => {
-          const next = cloneDecorations(prefix);
-          next.decorations.push(d.name);
-          onChange(next);
-        })
-      );
-    }
     wrap.append(decoRow);
 
     // Grace notes ------------------------------------------------------
@@ -835,11 +1027,64 @@ export class PropertyPanel {
   // ---- Utility -----------------------------------------------------------
 
   /** Perform a document edit and update this panel's selection tracking so
-   *  the char range stays consistent with the new text. */
+   *  the char range stays consistent with the new text.
+   *
+   *  When the edit is fully contained within the current selection (the
+   *  common case for prefix-only edits — adding a decoration, annotation,
+   *  or grace-note group to a selected note), the selection is preserved
+   *  and its end is shifted by the size delta. This keeps the whole
+   *  newly-decorated element selected so the property panel keeps showing
+   *  the same note. Other edits re-anchor the selection on the freshly
+   *  inserted text. */
   private applyRange(start: number, end: number, newText: string): void {
+    const oldSel = this.current;
     this.doc.replace(start, end, newText);
-    const newEnd = start + newText.length;
-    this.current = { startChar: start, endChar: newEnd };
+    const delta = newText.length - (end - start);
+    if (
+      oldSel &&
+      start >= oldSel.startChar &&
+      end <= oldSel.endChar &&
+      !(start === oldSel.startChar && end === oldSel.endChar)
+    ) {
+      this.current = {
+        startChar: oldSel.startChar,
+        endChar: oldSel.endChar + delta
+      };
+    } else {
+      this.current = { startChar: start, endChar: start + newText.length };
+    }
+    this.render();
+  }
+
+  /**
+   * Edit the document while keeping the selection anchored on a known
+   * element span [elemStart, elemEnd). Used by the binding row, whose
+   * tokens (triplet/slur/tie) live OUTSIDE the element's own range, so
+   * `applyRange`'s in-element heuristic does not fit. Adjusts the saved
+   * span by the size delta based on whether the edit is before, inside, or
+   * after the element.
+   */
+  private applyAround(
+    modStart: number,
+    modEnd: number,
+    newText: string,
+    elemStart: number,
+    elemEnd: number
+  ): void {
+    this.doc.replace(modStart, modEnd, newText);
+    const delta = newText.length - (modEnd - modStart);
+    let newStart = elemStart;
+    let newEnd = elemEnd;
+    if (modEnd <= elemStart) {
+      newStart += delta;
+      newEnd += delta;
+    } else if (modStart >= elemEnd) {
+      // Edit fully after the element — element span unchanged.
+    } else {
+      // Edit overlaps the element — shift the end only.
+      newEnd += delta;
+    }
+    this.current = { startChar: newStart, endChar: newEnd };
     this.render();
   }
 }

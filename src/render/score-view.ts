@@ -140,9 +140,16 @@ export class ScoreView {
     prev.forEach((n) => n.classList.remove("abc-gui-selected"));
     if (!this.selected) return;
 
-    // Preferred path: use the exact class list abcjs reported for the clicked
-    // element — works for every element type (notes, rests, bars, clefs,
-    // key & meter signatures, tempo, decorations, metadata, …).
+    // Preferred path: walk the engraved tune and find the absolute element(s)
+    // whose source range overlaps the selection, then highlight their SVG
+    // nodes directly. This works for every element type and — because it
+    // re-resolves against the freshly engraved structure on each call — keeps
+    // the visible selection in sync after any re-render triggered by a
+    // property-panel edit, even when positional class names have shifted.
+    if (this.highlightFromEngraver()) return;
+
+    // Fallback 1: use the exact class list abcjs reported for the clicked
+    // element when we still have a tune-less render (e.g. abcjs not loaded).
     if (this.selectedClasses) {
       const selector = classListToSelector(this.selectedClasses);
       if (selector) {
@@ -154,13 +161,79 @@ export class ScoreView {
       }
     }
 
-    // Fallback: abcjs tags note heads with `abcjs-n<startChar>`, which is all
-    // we can rely on when the selection originates from the raw-text caret
-    // or from a document mutation.
+    // Fallback 2: abcjs tags note heads with `abcjs-n<noteIndexInMeasure>`,
+    // which is not actually a character offset; this only matches when the
+    // note's index inside its measure happens to equal the selection's start.
+    // Kept for backwards-compatibility with the previous behaviour.
     const nodes = this.host.querySelectorAll<SVGElement>(
       `.abcjs-n${this.selected.startChar}`
     );
     nodes.forEach((n) => n.classList.add("abc-gui-selected"));
+  }
+
+  /**
+   * Use the abcjs engraver's `staffgroups` (populated during `engraveABC`)
+   * to map the current source-character selection onto live SVG nodes.
+   * Returns true when at least one node was highlighted.
+   */
+  private highlightFromEngraver(): boolean {
+    const sel = this.selected;
+    if (!sel) return false;
+    const tune = this.lastTune as
+      | {
+          engraver?: {
+            staffgroups?: Array<{
+              voices?: Array<{
+                children?: Array<{
+                  abcelem?: { startChar?: number; endChar?: number };
+                  elemset?: ArrayLike<Element> | null;
+                  svgEl?: Element | null;
+                }>;
+              }>;
+            }>;
+          };
+        }
+      | null;
+    const staffgroups = tune?.engraver?.staffgroups;
+    if (!Array.isArray(staffgroups)) return false;
+
+    const { startChar, endChar } = sel;
+    let found = false;
+    for (const group of staffgroups) {
+      for (const voice of group.voices ?? []) {
+        for (const child of voice.children ?? []) {
+          const ab = child.abcelem;
+          const s = ab?.startChar;
+          const e = ab?.endChar;
+          if (typeof s !== "number" || typeof e !== "number") continue;
+          // Same overlap test abcjs's own `rangeHighlight` uses, so notes,
+          // bars, rests, key signatures, time signatures, tempos etc. are
+          // all picked up.
+          const overlaps =
+            (endChar > s && startChar < e) ||
+            (endChar === startChar && endChar === e);
+          if (!overlaps) continue;
+          const set = child.elemset;
+          const setLen =
+            set && typeof set.length === "number" ? set.length : 0;
+          for (let i = 0; i < setLen; i++) {
+            const node = set![i];
+            if (node && node.classList) {
+              node.classList.add("abc-gui-selected");
+              found = true;
+            }
+          }
+          if (setLen === 0) {
+            const svgEl = child.svgEl;
+            if (svgEl && svgEl.classList) {
+              svgEl.classList.add("abc-gui-selected");
+              found = true;
+            }
+          }
+        }
+      }
+    }
+    return found;
   }
 }
 
@@ -184,7 +257,19 @@ function classListToSelector(classes: string): string {
         c !== "abcjs-decoration" &&
         c !== "abcjs-chord" &&
         c !== "abcjs-annotation"
-    );
+    )
+    // Drop the dynamic `_selected` flag classes abcjs adds to the SVG group
+    // when the user clicks an element. After a re-render those classes are
+    // gone, so leaving them in our selector would prevent the selection
+    // from being re-applied to the new SVG.
+    .filter((c) => !c.endsWith("_selected"))
+    // Drop intrinsic-property classes (`abcjs-d<duration>`, `abcjs-p<pitch>`)
+    // that change when the user edits the element via the property panel
+    // (e.g. flipping pitch, length, adding a triplet that re-scales the
+    // duration). The remaining positional classes (`abcjs-l<line>`,
+    // `abcjs-m<measure>`, `abcjs-mm<measureTotal>`, `abcjs-v<voice>`,
+    // `abcjs-n<noteIndexInMeasure>`) survive in-place edits.
+    .filter((c) => !/^abcjs-[dp][0-9]/.test(c));
   if (parts.length === 0) return "";
   const esc =
     typeof CSS !== "undefined" && typeof CSS.escape === "function"
