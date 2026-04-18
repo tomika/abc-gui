@@ -835,11 +835,32 @@ export class PropertyPanel {
   // ---- Utility -----------------------------------------------------------
 
   /** Perform a document edit and update this panel's selection tracking so
-   *  the char range stays consistent with the new text. */
+   *  the char range stays consistent with the new text.
+   *
+   *  When the edit is fully contained within the current selection (the
+   *  common case for prefix-only edits — adding a decoration, annotation,
+   *  or grace-note group to a selected note), the selection is preserved
+   *  and its end is shifted by the size delta. This keeps the whole
+   *  newly-decorated element selected so the property panel keeps showing
+   *  the same note. Other edits re-anchor the selection on the freshly
+   *  inserted text. */
   private applyRange(start: number, end: number, newText: string): void {
+    const oldSel = this.current;
     this.doc.replace(start, end, newText);
-    const newEnd = start + newText.length;
-    this.current = { startChar: start, endChar: newEnd };
+    const delta = newText.length - (end - start);
+    if (
+      oldSel &&
+      start >= oldSel.startChar &&
+      end <= oldSel.endChar &&
+      !(start === oldSel.startChar && end === oldSel.endChar)
+    ) {
+      this.current = {
+        startChar: oldSel.startChar,
+        endChar: oldSel.endChar + delta
+      };
+    } else {
+      this.current = { startChar: start, endChar: start + newText.length };
+    }
     this.render();
   }
 }

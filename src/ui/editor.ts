@@ -344,11 +344,24 @@ function remapRange(
   // Edit entirely after the selection: unchanged.
   if (start >= sel.endChar) return sel;
 
+  // Edit fully contained inside the selection (e.g. adding a decoration
+  // to a note's prefix while the whole note is selected): keep the
+  // selection anchored and shift only its end by the size delta. This
+  // keeps the score / raw / panel views in sync on the newly-modified
+  // element instead of clipping the highlight to just the inserted text.
+  const exactMatch = start === sel.startChar && end === sel.endChar;
+  if (
+    !exactMatch &&
+    start >= sel.startChar &&
+    end <= sel.endChar
+  ) {
+    return { startChar: sel.startChar, endChar: sel.endChar + delta };
+  }
+
   // Whole-document / surrounding replacement (setValue, undo, redo) —
   // when the edit strictly covers the selection on at least one side AND
   // isn't an exact-match surgical edit, the original anchor is gone:
   // drop the selection.
-  const exactMatch = start === sel.startChar && end === sel.endChar;
   if (!exactMatch && start <= sel.startChar && end >= sel.endChar) {
     return null;
   }

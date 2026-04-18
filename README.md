@@ -8,8 +8,6 @@ Fully-featured WYSIWYG editor for [ABC music notation](https://abcnotation.com/w
 - Unicode glyphs on all buttons → language-independent UI.
 - No React / Angular / Vue.
 
-See [plan.md](./plan.md) for the full design and the ABC feature inventory.
-
 ## Install
 
 ```sh

@@ -99,6 +99,10 @@ export class Toolbar {
       historyGroup,
       playbackGroup,
       modeGroup,
+      // Insert group: only standalone score elements live here. Note/rest
+      // properties — accidentals, length, ties, triplets, slurs, grace
+      // notes, chord symbols, annotations, and decorations — are edited
+      // via the property panel of the selected note instead.
       this.group("Insert", [
         { glyph: "♪", title: "insert note (C)" + shiftHint, snippet: "C" },
         { glyph: "𝄽", title: "insert rest" + shiftHint, snippet: "z" },
@@ -106,21 +110,12 @@ export class Toolbar {
         { glyph: "∣", title: "insert bar line" + shiftHint, snippet: "|" },
         { glyph: "‖", title: "insert double bar" + shiftHint, snippet: "||" },
         { glyph: "|:", title: "insert start-repeat" + shiftHint, snippet: "|:" },
-        { glyph: ":|", title: "insert end-repeat" + shiftHint, snippet: ":|" },
-        { glyph: "(3", title: "insert triplet" + shiftHint, snippet: "(3" },
-        { glyph: "⌒", title: "insert tie" + shiftHint, snippet: "-" },
-        { glyph: "(…)", title: "insert slur" + shiftHint, snippet: "()" },
-        { glyph: "{♪}", title: "insert grace-note group" + shiftHint, snippet: "{c}" }
+        { glyph: ":|", title: "insert end-repeat" + shiftHint, snippet: ":|" }
       ]),
       this.group("Accidental", [
         { glyph: "♯", title: "sharp" + shiftHint, snippet: "^" },
         { glyph: "♭", title: "flat" + shiftHint, snippet: "_" },
         { glyph: "♮", title: "natural" + shiftHint, snippet: "=" }
-      ]),
-      this.group("Annotation", [
-        { glyph: '"Am"', title: "insert chord symbol" + shiftHint, snippet: '"Am"' },
-        { glyph: '"^…"', title: "insert above annotation" + shiftHint, snippet: '"^text"' },
-        { glyph: '"_…"', title: "insert below annotation" + shiftHint, snippet: '"_text"' }
       ]),
       this.group("Decoration", [
         { glyph: "·", title: "staccato" + shiftHint, snippet: "!staccato!" },
