@@ -22,6 +22,7 @@ export class AbcEditor {
   private doc: AbcDocument;
   private score: ScoreView;
   private panel: PropertyPanel;
+  private toolbar: Toolbar;
   private raw: RawView | null = null;
   private currentSelection: Selection | null = null;
   /** abcjs CSS classes for the currently selected SVG group (when known).
@@ -36,10 +37,12 @@ export class AbcEditor {
   private playbackListeners: (() => void)[] = [];
   private selectionListeners: (() => void)[] = [];
   private rawSelectEnabled = true;
+  private pendingFocusAfterRender = false;
 
   constructor(container: HTMLElement, opts: AbcEditorOptions = {}) {
     this.container = container;
     this.container.classList.add("abc-gui-root");
+    if (this.container.tabIndex < 0) this.container.tabIndex = 0;
     this.container.innerHTML = "";
 
     this.doc = new AbcDocument(opts.value ?? "");
@@ -64,6 +67,10 @@ export class AbcEditor {
     this.score.onRender(() => {
       this.player.invalidate();
       this.firePlaybackChange();
+      if (this.pendingFocusAfterRender) {
+        this.pendingFocusAfterRender = false;
+        this.focusEditor(false);
+      }
     });
     if (!opts.hideRawView) {
       this.raw = new RawView(rawHost, this.doc);
@@ -71,7 +78,7 @@ export class AbcEditor {
       // ABC element (music note/bar/rest) or the header line it sits on.
       this.raw.onCaret((start, end) => this.handleRawCaret(start, end));
     }
-    new Toolbar(toolbarHost, {
+    this.toolbar = new Toolbar(toolbarHost, {
       doc: this.doc,
       getSelection: () => this.currentSelection,
       setSelection: (s) => this.select(s),
@@ -120,17 +127,118 @@ export class AbcEditor {
       }
     });
 
-    // Keyboard shortcuts: undo / redo when focus is inside the editor.
+    // Keyboard shortcuts: navigation + editing actions while focus is inside
+    // the editor (except text inputs/selects/textarea where typing should win).
     this.keydownHandler = (ev: KeyboardEvent) => {
-      const mod = ev.ctrlKey || ev.metaKey;
-      if (!mod) return;
-      if (ev.key === "z" || ev.key === "Z") {
+      if (ev.key === "Escape") {
         ev.preventDefault();
+        this.focusEditor();
+        return;
+      }
+
+      if (this.isEditableTarget(ev.target)) return;
+
+      const mod = ev.ctrlKey || ev.metaKey;
+      if (mod && (ev.key === "z" || ev.key === "Z")) {
+        ev.preventDefault();
+        this.focusEditor();
         if (ev.shiftKey) this.doc.redo();
         else this.doc.undo();
-      } else if (ev.key === "y" || ev.key === "Y") {
+        return;
+      }
+      if (mod && (ev.key === "y" || ev.key === "Y")) {
         ev.preventDefault();
+        this.focusEditor();
         this.doc.redo();
+        return;
+      }
+      if (mod && ev.key === "Home") {
+        ev.preventDefault();
+        this.focusEditor();
+        this.selectFirstElement();
+        return;
+      }
+      if (mod && ev.key === "End") {
+        ev.preventDefault();
+        this.focusEditor();
+        this.selectLastElement();
+        return;
+      }
+      if (mod) return;
+
+      if (ev.key === "Tab") {
+        ev.preventDefault();
+        this.focusEditor();
+        this.moveSelectionBy(ev.shiftKey ? -1 : 1);
+        return;
+      }
+
+      if (ev.key === "ArrowLeft") {
+        ev.preventDefault();
+        this.focusEditor();
+        if (ev.shiftKey) this.panel.stepLength(1); // longer
+        else this.moveSelectionBy(-1);
+        return;
+      }
+      if (ev.key === "ArrowRight") {
+        ev.preventDefault();
+        this.focusEditor();
+        if (ev.shiftKey) this.panel.stepLength(-1); // shorter
+        else this.moveSelectionBy(1);
+        return;
+      }
+      if (ev.key === "Home") {
+        ev.preventDefault();
+        this.focusEditor();
+        this.selectLineBoundaryElement("first");
+        return;
+      }
+      if (ev.key === "End") {
+        ev.preventDefault();
+        this.focusEditor();
+        this.selectLineBoundaryElement("last");
+        return;
+      }
+      if (ev.key === "Delete") {
+        ev.preventDefault();
+        this.focusEditor();
+        this.deleteCurrentElement("next");
+        return;
+      }
+      if (ev.key === "Backspace") {
+        ev.preventDefault();
+        this.focusEditor();
+        this.deleteCurrentElement("prev");
+        return;
+      }
+
+      if (
+        ev.key === "ArrowUp" ||
+        ev.key === "ArrowDown" ||
+        ev.key === "PageUp" ||
+        ev.key === "PageDown"
+      ) {
+        if (this.panel.handleShortcut(ev.key, { shiftKey: ev.shiftKey })) {
+          ev.preventDefault();
+          this.focusEditor();
+        }
+        return;
+      }
+
+      if (this.panel.handleShortcut(ev.key, { shiftKey: ev.shiftKey })) {
+        ev.preventDefault();
+        // '+' opens a new attached-text input; keep focus on that field.
+        if (ev.key === "+" || ev.key === "Add") {
+          this.pendingFocusAfterRender = false;
+        } else {
+          this.focusEditor();
+        }
+        return;
+      }
+      if (this.toolbar.handleShortcut(ev.key, ev.shiftKey)) {
+        ev.preventDefault();
+        this.focusEditor();
+        return;
       }
     };
     this.container.addEventListener("keydown", this.keydownHandler);
@@ -164,6 +272,7 @@ export class AbcEditor {
   // Internal -----------------------------------------------------
 
   private handleScoreClick(ev: SelectionEvent): void {
+    this.container.focus();
     // abcjs reports clef / key-signature / time-signature / tempo /
     // metadata clicks with a range that sits inside (or equals) the
     // underlying `K:` / `M:` / `Q:` / `[K:...]` source. The raw range by
@@ -316,6 +425,154 @@ export class AbcEditor {
       this.raw.highlightRange(sel.startChar, sel.endChar);
     }
     for (const l of [...this.selectionListeners]) l();
+  }
+
+  private isEditableTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) return false;
+    return !!target.closest("input, textarea, select, [contenteditable='true']");
+  }
+
+  private focusEditor(scheduleAfterRender = true): void {
+    if (scheduleAfterRender) this.pendingFocusAfterRender = true;
+    const svg = this.container.querySelector(".abc-gui-score svg") as SVGElement | null;
+    if (svg) {
+      if (!svg.hasAttribute("tabindex")) svg.setAttribute("tabindex", "-1");
+      const focusFn = (svg as unknown as { focus?: (opts?: FocusOptions) => void }).focus;
+      if (typeof focusFn === "function") {
+        try {
+          focusFn.call(svg, { preventScroll: true });
+        } catch {
+          focusFn.call(svg);
+        }
+        return;
+      }
+    }
+    try {
+      this.container.focus({ preventScroll: true });
+    } catch {
+      this.container.focus();
+    }
+  }
+
+  private allElementRanges(): Selection[] {
+    const out: Selection[] = [];
+    const seen = new Set<string>();
+    this.doc.forEachElement((el) => {
+      const key = `${el.startChar}:${el.endChar}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ startChar: el.startChar, endChar: el.endChar });
+    });
+    out.sort((a, b) =>
+      a.startChar === b.startChar
+        ? a.endChar - b.endChar
+        : a.startChar - b.startChar
+    );
+    return out;
+  }
+
+  private moveSelectionBy(step: -1 | 1): void {
+    const ranges = this.allElementRanges();
+    if (ranges.length === 0) return;
+
+    if (!this.currentSelection) {
+      this.select(step > 0 ? ranges[0]! : ranges[ranges.length - 1]!);
+      return;
+    }
+
+    const curStart = this.currentSelection.startChar;
+    const curEnd = this.currentSelection.endChar;
+    const idx = ranges.findIndex(
+      (r) => r.startChar === curStart && r.endChar === curEnd
+    );
+    if (idx >= 0) {
+      const nextIdx = Math.max(0, Math.min(ranges.length - 1, idx + step));
+      this.select(ranges[nextIdx]!);
+      return;
+    }
+
+    if (step > 0) {
+      const next = ranges.find((r) => r.startChar >= curEnd) ?? ranges[ranges.length - 1]!;
+      this.select(next);
+    } else {
+      const prevCandidates = ranges.filter((r) => r.endChar <= curStart);
+      this.select(prevCandidates[prevCandidates.length - 1] ?? ranges[0]!);
+    }
+  }
+
+  private selectFirstElement(): void {
+    const ranges = this.allElementRanges();
+    if (ranges.length === 0) return;
+    this.select(ranges[0]!);
+  }
+
+  private selectLastElement(): void {
+    const ranges = this.allElementRanges();
+    if (ranges.length === 0) return;
+    this.select(ranges[ranges.length - 1]!);
+  }
+
+  private selectLineBoundaryElement(which: "first" | "last"): void {
+    const ranges = this.allElementRanges();
+    if (ranges.length === 0) return;
+
+    const anchor = this.currentSelection?.startChar ?? 0;
+    const src = this.doc.value;
+    const lineStart = src.lastIndexOf("\n", Math.max(0, anchor - 1)) + 1;
+    const nl = src.indexOf("\n", anchor);
+    const lineEnd = nl >= 0 ? nl : src.length;
+
+    const inLine = ranges.filter(
+      (r) => r.startChar >= lineStart && r.startChar < lineEnd
+    );
+    if (inLine.length === 0) return;
+    this.select(which === "first" ? inLine[0]! : inLine[inLine.length - 1]!);
+  }
+
+  private deleteCurrentElement(direction: "next" | "prev"): void {
+    if (!this.currentSelection) return;
+
+    const ranges = this.allElementRanges();
+    if (ranges.length === 0) return;
+
+    const selStart = Math.min(
+      this.currentSelection.startChar,
+      this.currentSelection.endChar
+    );
+    const selEnd = Math.max(
+      this.currentSelection.startChar,
+      this.currentSelection.endChar
+    );
+
+    let idx = ranges.findIndex(
+      (r) => r.startChar === selStart && r.endChar === selEnd
+    );
+    if (idx < 0) {
+      idx = ranges.findIndex((r) => r.startChar < selEnd && r.endChar > selStart);
+    }
+    if (idx < 0) return;
+
+    const target = ranges[idx]!;
+    const removedLen = target.endChar - target.startChar;
+    let nextSel: Selection | null = null;
+
+    if (direction === "next") {
+      const rawNext = ranges[idx + 1] ?? null;
+      if (rawNext) {
+        nextSel = {
+          startChar: rawNext.startChar - removedLen,
+          endChar: rawNext.endChar - removedLen
+        };
+      }
+    } else {
+      const rawPrev = ranges[idx - 1] ?? null;
+      if (rawPrev) {
+        nextSel = { startChar: rawPrev.startChar, endChar: rawPrev.endChar };
+      }
+    }
+
+    this.doc.replace(target.startChar, target.endChar, "");
+    this.select(nextSel);
   }
 
   private handlePlay(): void {

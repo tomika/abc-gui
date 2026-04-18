@@ -321,4 +321,44 @@ export class AbcDocument {
     }
     return last ?? { num: 1, den: 8 };
   }
+
+  /**
+   * Return the effective key signature in force at `offset`, parsed from
+   * the most recent `K:` directive (header, body, or inline `[K:...]`).
+   *
+   * Defaults to C major when no `K:` is found.
+   */
+  keyAt(offset: number): { tonic: string; accidental: "" | "#" | "b"; mode: string } {
+    const v = this._value;
+    const upto = v.slice(0, Math.max(0, Math.min(offset, v.length)));
+    // Match either header/body line `K:...` or inline `[K:...]`.
+    const re = /(?:^|\n)\s*K:\s*([^\n\r\]]*)|\[\s*K:\s*([^\]\n\r]*)\]/g;
+    let lastValue: string | null = null;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(upto)) !== null) {
+      const v2 = (m[1] ?? m[2] ?? "").trim();
+      if (v2.length > 0) lastValue = v2;
+    }
+    return parseKeySpec(lastValue ?? "C");
+  }
+}
+
+function parseKeySpec(spec: string): { tonic: string; accidental: "" | "#" | "b"; mode: string } {
+  // e.g. "G", "Bb", "F#dor", "C#m", "Eb maj", "HP" (highland pipes — fall back to C)
+  const m = /^([A-Ga-g])([#b]?)\s*([A-Za-z]*)/.exec(spec.trim());
+  if (!m) return { tonic: "C", accidental: "", mode: "maj" };
+  const tonic = m[1]!.toUpperCase();
+  const acc = (m[2] as "" | "#" | "b") ?? "";
+  const rawMode = (m[3] ?? "").toLowerCase();
+  let mode: string;
+  if (!rawMode) mode = "maj";
+  else if (rawMode.startsWith("min") || rawMode === "m" || rawMode.startsWith("aeo")) mode = "min";
+  else if (rawMode.startsWith("maj") || rawMode.startsWith("ion")) mode = "maj";
+  else if (rawMode.startsWith("dor")) mode = "dor";
+  else if (rawMode.startsWith("phr")) mode = "phr";
+  else if (rawMode.startsWith("lyd")) mode = "lyd";
+  else if (rawMode.startsWith("mix")) mode = "mix";
+  else if (rawMode.startsWith("loc")) mode = "loc";
+  else mode = "maj";
+  return { tonic, accidental: acc, mode };
 }

@@ -41,6 +41,23 @@ export interface Selection {
   abcelem?: AbcElement | null;
 }
 
+interface SelectionContext {
+  selStart: number;
+  selEnd: number;
+  coreStart: number;
+  coreEnd: number;
+  core: string;
+  kind:
+    | "note"
+    | "chord"
+    | "rest"
+    | "bar"
+    | "info-line"
+    | "inline-field"
+    | "other";
+  prefix: ElementPrefix;
+}
+
 export class PropertyPanel {
   private host: HTMLElement;
   private doc: AbcDocument;
@@ -78,6 +95,110 @@ export class PropertyPanel {
 
   refresh(): void {
     this.render();
+  }
+
+  /**
+   * Trigger property-panel actions from keyboard shortcuts.
+   * Returns true when the key was handled.
+   */
+  handleShortcut(key: string, opts: { shiftKey?: boolean } = {}): boolean {
+    const ctx = this.resolveSelectionContext();
+    if (!ctx) return false;
+
+    if (key >= "1" && key <= "9") {
+      return this.applyLengthShortcut(ctx, parseInt(key, 10));
+    }
+
+    if (key === "ArrowUp" || key === "ArrowDown") {
+      const dir = key === "ArrowUp" ? 1 : -1;
+      if (opts.shiftKey) {
+        // Shift: chromatic semitone.
+        return this.transposePitchShortcut(ctx, dir);
+      }
+      // Default: diatonic step in current key.
+      return this.transposeDiatonicShortcut(ctx, dir);
+    }
+
+    if (key === "PageUp" || key === "PageDown") {
+      const delta = key === "PageUp" ? 1 : -1;
+      return this.shiftOctaveShortcut(ctx, delta);
+    }
+
+    if (key.length === 1) {
+      const upper = key.toUpperCase();
+      if (/^[A-G]$/.test(upper)) {
+        return this.applyPitchLetterShortcut(ctx, upper);
+      }
+    }
+
+    if (key === "(" || key === ")" || key === "-") {
+      return this.toggleBindingShortcut(ctx, key);
+    }
+    if (key === "+" || key === "Add") {
+      return this.addAttachedTextShortcut(ctx);
+    }
+    if (key === ".") {
+      return this.toggleDotShortcut(ctx);
+    }
+
+    return false;
+  }
+
+  private addAttachedTextShortcut(ctx: SelectionContext): boolean {
+    if (!(ctx.kind === "note" || ctx.kind === "chord" || ctx.kind === "rest")) {
+      return false;
+    }
+    const next = cloneAnnotations(ctx.prefix);
+    this.pendingAnnotationFocusIndex = next.annotations.length;
+    next.annotations.push({ raw: '""', placement: "", text: "" });
+    this.applyRange(ctx.selStart, ctx.coreStart, writePrefix(next));
+    return true;
+  }
+
+  private toggleDotShortcut(ctx: SelectionContext): boolean {
+    if (ctx.kind === "note") {
+      const parsed = readNote(ctx.core.trim(), 0);
+      if (!parsed) return false;
+      const base = this.dottedBaseRelativeAt(
+        ctx.coreStart,
+        parsed.num,
+        parsed.den
+      );
+      const next = base
+        ? { ...parsed, num: base.num, den: base.den }
+        : { ...parsed, num: parsed.num * 3, den: parsed.den * 2 };
+      this.applyRange(ctx.coreStart, ctx.coreEnd, writeNote(next));
+      return true;
+    }
+    if (ctx.kind === "chord") {
+      const parsed = readChord(ctx.core.trim(), 0);
+      if (!parsed) return false;
+      const base = this.dottedBaseRelativeAt(
+        ctx.coreStart,
+        parsed.num,
+        parsed.den
+      );
+      const next = base
+        ? { ...parsed, num: base.num, den: base.den }
+        : { ...parsed, num: parsed.num * 3, den: parsed.den * 2 };
+      this.applyRange(ctx.coreStart, ctx.coreEnd, writeChord(next));
+      return true;
+    }
+    if (ctx.kind === "rest") {
+      const parsed = readRest(ctx.core.trim(), 0);
+      if (!parsed) return false;
+      const base = this.dottedBaseRelativeAt(
+        ctx.coreStart,
+        parsed.num,
+        parsed.den
+      );
+      const next = base
+        ? { ...parsed, num: base.num, den: base.den }
+        : { ...parsed, num: parsed.num * 3, den: parsed.den * 2 };
+      this.applyRange(ctx.coreStart, ctx.coreEnd, writeRest(next));
+      return true;
+    }
+    return false;
   }
 
   // ------------------------------------------------------------------
@@ -161,6 +282,284 @@ export class PropertyPanel {
 
     // Raw fallback — always present (covers the WHOLE selection, prefix + core).
     this.host.append(this.buildRawEditor(raw, startChar, endChar));
+  }
+
+  private resolveSelectionContext(): SelectionContext | null {
+    if (!this.current) return null;
+    const selStart = this.current.startChar;
+    const selEnd = this.current.endChar;
+    const raw = this.doc.slice(selStart, selEnd);
+    const leadingWs = raw.match(/^\s*/)![0].length;
+    const trailingWs = raw.match(/\s*$/)![0].length;
+    const inner = raw.slice(leadingWs, raw.length - trailingWs);
+    const prefix = readPrefix(inner, 0);
+    const coreStart = selStart + leadingWs + prefix.end;
+    const coreEnd = selEnd - trailingWs;
+    const core = this.doc.slice(coreStart, coreEnd);
+    const kind = this.classify(core);
+    return { selStart, selEnd, coreStart, coreEnd, core, kind, prefix };
+  }
+
+  private applyPitchLetterShortcut(
+    ctx: SelectionContext,
+    letter: string
+  ): boolean {
+    if (ctx.kind === "note") {
+      const parsed = readNote(ctx.core.trim(), 0);
+      if (!parsed) return false;
+      this.applyRange(ctx.coreStart, ctx.coreEnd, writeNote({ ...parsed, letter }));
+      return true;
+    }
+    if (ctx.kind === "chord") {
+      const parsed = readChord(ctx.core.trim(), 0);
+      if (!parsed || parsed.notes.length === 0) return false;
+      const idx = Math.max(0, Math.min(this.chordActiveTab, parsed.notes.length - 1));
+      parsed.notes[idx] = { ...parsed.notes[idx]!, letter };
+      this.applyRange(ctx.coreStart, ctx.coreEnd, writeChord(parsed));
+      return true;
+    }
+    return false;
+  }
+
+  private shiftOctaveShortcut(ctx: SelectionContext, delta: number): boolean {
+    if (ctx.kind === "note") {
+      const parsed = readNote(ctx.core.trim(), 0);
+      if (!parsed) return false;
+      this.applyRange(ctx.coreStart, ctx.coreEnd, writeNote({ ...parsed, octave: parsed.octave + delta }));
+      return true;
+    }
+    if (ctx.kind === "chord") {
+      const parsed = readChord(ctx.core.trim(), 0);
+      if (!parsed || parsed.notes.length === 0) return false;
+      const idx = Math.max(0, Math.min(this.chordActiveTab, parsed.notes.length - 1));
+      const note = parsed.notes[idx]!;
+      parsed.notes[idx] = { ...note, octave: note.octave + delta };
+      this.applyRange(ctx.coreStart, ctx.coreEnd, writeChord(parsed));
+      return true;
+    }
+    return false;
+  }
+
+  private transposePitchShortcut(
+    ctx: SelectionContext,
+    semitoneDelta: number
+  ): boolean {
+    if (ctx.kind === "note") {
+      const parsed = readNote(ctx.core.trim(), 0);
+      if (!parsed) return false;
+      this.applyRange(
+        ctx.coreStart,
+        ctx.coreEnd,
+        writeNote(transposeParsedNote(parsed, semitoneDelta))
+      );
+      return true;
+    }
+    if (ctx.kind === "chord") {
+      const parsed = readChord(ctx.core.trim(), 0);
+      if (!parsed || parsed.notes.length === 0) return false;
+      const idx = Math.max(0, Math.min(this.chordActiveTab, parsed.notes.length - 1));
+      parsed.notes[idx] = transposeParsedNote(parsed.notes[idx]!, semitoneDelta);
+      this.applyRange(ctx.coreStart, ctx.coreEnd, writeChord(parsed));
+      return true;
+    }
+    return false;
+  }
+
+  private transposeDiatonicShortcut(
+    ctx: SelectionContext,
+    dir: 1 | -1
+  ): boolean {
+    // We don't need to add accidentals — leaving the new letter bare lets
+    // the prevailing key signature (detected by the renderer at this offset)
+    // govern its pitch, so the step is naturally a half- or whole-tone as
+    // the current key dictates.
+    if (ctx.kind === "note") {
+      const parsed = readNote(ctx.core.trim(), 0);
+      if (!parsed) return false;
+      const stepped = diatonicStepNote(parsed, dir);
+      this.applyRange(ctx.coreStart, ctx.coreEnd, writeNote(stepped));
+      return true;
+    }
+    if (ctx.kind === "chord") {
+      const parsed = readChord(ctx.core.trim(), 0);
+      if (!parsed || parsed.notes.length === 0) return false;
+      const idx = Math.max(0, Math.min(this.chordActiveTab, parsed.notes.length - 1));
+      parsed.notes[idx] = diatonicStepNote(parsed.notes[idx]!, dir);
+      this.applyRange(ctx.coreStart, ctx.coreEnd, writeChord(parsed));
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Step the selected element's length one preset shorter (`dir = -1`) or
+   * longer (`dir = +1`), based on the canonical absolute-length presets.
+   * Preserves a dotted modifier when present.
+   */
+  stepLength(dir: 1 | -1): boolean {
+    const ctx = this.resolveSelectionContext();
+    if (!ctx) return false;
+    if (ctx.kind !== "note" && ctx.kind !== "chord" && ctx.kind !== "rest") {
+      return false;
+    }
+    const cur = (() => {
+      if (ctx.kind === "note") {
+        const p = readNote(ctx.core.trim(), 0);
+        return p ? { num: p.num, den: p.den } : null;
+      }
+      if (ctx.kind === "chord") {
+        const p = readChord(ctx.core.trim(), 0);
+        return p ? { num: p.num, den: p.den } : null;
+      }
+      const p = readRest(ctx.core.trim(), 0);
+      return p ? { num: p.num, den: p.den } : null;
+    })();
+    if (!cur) return false;
+    const L = this.doc.unitLengthAt(ctx.coreStart);
+    const dotted = this.dottedBaseRelativeAt(ctx.coreStart, cur.num, cur.den);
+    const baseRel = dotted ?? cur;
+    // Locate base in absolute presets.
+    const absN = baseRel.num * L.num;
+    const absD = baseRel.den * L.den;
+    let idx = -1;
+    for (let i = 0; i < ABSOLUTE_LENGTH_PRESETS.length; i++) {
+      const p = ABSOLUTE_LENGTH_PRESETS[i]!;
+      // Compare as fractions: p.num/p.den == absN/absD ⇔ p.num*absD == p.den*absN
+      if (p.num * absD === p.den * absN) {
+        idx = i;
+        break;
+      }
+    }
+    // Presets are ordered longest → shortest. dir=+1 means longer (idx-1),
+    // dir=-1 means shorter (idx+1). If current isn't on a preset, snap to the
+    // nearest reasonable one.
+    if (idx < 0) {
+      // Find closest by absolute duration.
+      const ratio = absN / absD;
+      let best = 0;
+      let bestDiff = Infinity;
+      for (let i = 0; i < ABSOLUTE_LENGTH_PRESETS.length; i++) {
+        const p = ABSOLUTE_LENGTH_PRESETS[i]!;
+        const d = Math.abs(p.num / p.den - ratio);
+        if (d < bestDiff) {
+          bestDiff = d;
+          best = i;
+        }
+      }
+      idx = best;
+    }
+    const nextIdx = idx + (dir === 1 ? -1 : 1);
+    if (nextIdx < 0 || nextIdx >= ABSOLUTE_LENGTH_PRESETS.length) return false;
+    const next = ABSOLUTE_LENGTH_PRESETS[nextIdx]!;
+    // Convert next absolute → relative, apply dot if original was dotted.
+    const relN = next.num * L.den;
+    const relD = next.den * L.num;
+    const g0 = gcd(relN, relD);
+    let newNum = relN / g0;
+    let newDen = relD / g0;
+    if (dotted) {
+      newNum = newNum * 3;
+      newDen = newDen * 2;
+      const g = gcd(newNum, newDen);
+      newNum /= g;
+      newDen /= g;
+    }
+    if (ctx.kind === "note") {
+      const p = readNote(ctx.core.trim(), 0)!;
+      this.applyRange(ctx.coreStart, ctx.coreEnd, writeNote({ ...p, num: newNum, den: newDen }));
+      return true;
+    }
+    if (ctx.kind === "chord") {
+      const p = readChord(ctx.core.trim(), 0)!;
+      this.applyRange(ctx.coreStart, ctx.coreEnd, writeChord({ ...p, num: newNum, den: newDen }));
+      return true;
+    }
+    const p = readRest(ctx.core.trim(), 0)!;
+    this.applyRange(ctx.coreStart, ctx.coreEnd, writeRest({ ...p, num: newNum, den: newDen }));
+    return true;
+  }
+
+  private applyLengthShortcut(ctx: SelectionContext, digit: number): boolean {
+    const preset = LENGTH_SHORTCUT_FRACTIONS[digit - 1];
+    if (!preset) return false;
+    if (ctx.kind === "note") {
+      const parsed = readNote(ctx.core.trim(), 0);
+      if (!parsed) return false;
+      this.applyRange(
+        ctx.coreStart,
+        ctx.coreEnd,
+        writeNote({ ...parsed, num: preset.num, den: preset.den })
+      );
+      return true;
+    }
+    if (ctx.kind === "chord") {
+      const parsed = readChord(ctx.core.trim(), 0);
+      if (!parsed) return false;
+      this.applyRange(
+        ctx.coreStart,
+        ctx.coreEnd,
+        writeChord({ ...parsed, num: preset.num, den: preset.den })
+      );
+      return true;
+    }
+    if (ctx.kind === "rest") {
+      const parsed = readRest(ctx.core.trim(), 0);
+      if (!parsed) return false;
+      this.applyRange(
+        ctx.coreStart,
+        ctx.coreEnd,
+        writeRest({ ...parsed, num: preset.num, den: preset.den })
+      );
+      return true;
+    }
+    return false;
+  }
+
+  private toggleDecorationShortcut(
+    ctx: SelectionContext,
+    name: string
+  ): boolean {
+    if (!(ctx.kind === "note" || ctx.kind === "chord" || ctx.kind === "rest")) {
+      return false;
+    }
+    const next = cloneDecorations(ctx.prefix);
+    const idx = next.decorations.indexOf(name);
+    if (idx >= 0) next.decorations.splice(idx, 1);
+    else next.decorations.push(name);
+    this.applyRange(ctx.selStart, ctx.coreStart, writePrefix(next));
+    return true;
+  }
+
+  private toggleBindingShortcut(
+    ctx: SelectionContext,
+    key: "(" | ")" | "-"
+  ): boolean {
+    if (!(ctx.kind === "note" || ctx.kind === "chord" || ctx.kind === "rest")) {
+      return false;
+    }
+    const b = this.bindingState(ctx.selStart, ctx.selEnd);
+    if (key === "(") {
+      if (b.hasSlurStart) {
+        this.applyAround(b.leftStart - 1, b.leftStart, "", ctx.selStart, ctx.selEnd);
+      } else {
+        this.applyAround(ctx.selStart, ctx.selStart, "(", ctx.selStart, ctx.selEnd);
+      }
+      return true;
+    }
+    if (key === ")") {
+      if (b.hasSlurEnd) {
+        this.applyAround(b.rightStart, b.rightStart + 1, "", ctx.selStart, ctx.selEnd);
+      } else {
+        this.applyAround(ctx.selEnd, ctx.selEnd, ")", ctx.selStart, ctx.selEnd);
+      }
+      return true;
+    }
+    if (b.hasTie) {
+      this.applyAround(b.tieProbe, b.tieProbe + 1, "", ctx.selStart, ctx.selEnd);
+    } else {
+      this.applyAround(ctx.selEnd, ctx.selEnd, "-", ctx.selStart, ctx.selEnd);
+    }
+    return true;
   }
 
   private classify(raw: string):
@@ -323,6 +722,9 @@ export class PropertyPanel {
       this.unitLengthInfoRow(start, parsed.num, parsed.den),
       this.lengthRow(start, parsed.num, parsed.den, (n, d) =>
         apply({ num: n, den: d })
+      ),
+      this.dotRow(start, parsed.num, parsed.den, (n, d) =>
+        apply({ num: n, den: d })
       )
     );
   }
@@ -409,39 +811,7 @@ export class PropertyPanel {
    * element stays selected after the edit.
    */
   private bindingRow(start: number, end: number): HTMLElement {
-    const v = this.doc.value;
-
-    // Find the nearest non-whitespace position to the LEFT of `start` so we
-    // can recognize triplet/slur prefixes that the user spaced apart.
-    let leftEnd = start; // exclusive end of the gap
-    let leftStart = start;
-    while (leftStart > 0 && (v[leftStart - 1] === " " || v[leftStart - 1] === "\t")) {
-      leftStart--;
-    }
-    // Triplet: "(3" immediately before (skipping whitespace).
-    const hasTriplet =
-      leftStart >= 2 &&
-      v[leftStart - 2] === "(" &&
-      v[leftStart - 1] === "3";
-    // Slur start: "(" immediately before (and NOT followed by a digit so we
-    // don't confuse it with a tuplet marker).
-    const hasSlurStart =
-      !hasTriplet &&
-      leftStart >= 1 &&
-      v[leftStart - 1] === "(" &&
-      !(leftStart < v.length && /[0-9]/.test(v[leftStart] ?? ""));
-
-    // Find the nearest non-whitespace position to the RIGHT of `end`.
-    let rightStart = end;
-    while (rightStart < v.length && (v[rightStart] === " " || v[rightStart] === "\t")) {
-      rightStart++;
-    }
-    const hasSlurEnd = v[rightStart] === ")";
-    // Tie: "-" attached after the element (possibly after a slur close).
-    let tieProbe = rightStart;
-    if (v[tieProbe] === ")") tieProbe++;
-    while (tieProbe < v.length && (v[tieProbe] === " " || v[tieProbe] === "\t")) tieProbe++;
-    const hasTie = v[tieProbe] === "-";
+    const b = this.bindingState(start, end);
 
     const row = el("div", { class: "abc-gui-row abc-gui-binding-row" }, [
       el("span", { class: "abc-gui-label" }, ["Group"])
@@ -451,17 +821,17 @@ export class PropertyPanel {
     row.append(
       button(
         "(3",
-        hasTriplet
+        b.hasTriplet
           ? "remove triplet marker"
           : "start triplet (this note + next two)",
         () => {
-          if (hasTriplet) {
-            this.applyAround(leftStart - 2, leftStart, "", start, end);
+          if (b.hasTriplet) {
+            this.applyAround(b.leftStart - 2, b.leftStart, "", start, end);
           } else {
             this.applyAround(start, start, "(3", start, end);
           }
         },
-        { active: hasTriplet }
+        { active: b.hasTriplet }
       )
     );
 
@@ -469,15 +839,17 @@ export class PropertyPanel {
     row.append(
       button(
         "(",
-        hasSlurStart ? "remove slur start" : "start slur",
+        b.hasSlurStart
+          ? "remove slur start (shortcut key: '(')"
+          : "start slur (shortcut key: '(')",
         () => {
-          if (hasSlurStart) {
-            this.applyAround(leftStart - 1, leftStart, "", start, end);
+          if (b.hasSlurStart) {
+            this.applyAround(b.leftStart - 1, b.leftStart, "", start, end);
           } else {
             this.applyAround(start, start, "(", start, end);
           }
         },
-        { active: hasSlurStart }
+        { active: b.hasSlurStart }
       )
     );
 
@@ -485,15 +857,17 @@ export class PropertyPanel {
     row.append(
       button(
         ")",
-        hasSlurEnd ? "remove slur end" : "end slur",
+        b.hasSlurEnd
+          ? "remove slur end (shortcut key: ')')"
+          : "end slur (shortcut key: ')')",
         () => {
-          if (hasSlurEnd) {
-            this.applyAround(rightStart, rightStart + 1, "", start, end);
+          if (b.hasSlurEnd) {
+            this.applyAround(b.rightStart, b.rightStart + 1, "", start, end);
           } else {
             this.applyAround(end, end, ")", start, end);
           }
         },
-        { active: hasSlurEnd }
+        { active: b.hasSlurEnd }
       )
     );
 
@@ -501,19 +875,67 @@ export class PropertyPanel {
     row.append(
       button(
         "⌒",
-        hasTie ? "remove tie to next note" : "tie to next note",
+        b.hasTie
+          ? "remove tie to next note (shortcut key: '-')"
+          : "tie to next note (shortcut key: '-')",
         () => {
-          if (hasTie) {
-            this.applyAround(tieProbe, tieProbe + 1, "", start, end);
+          if (b.hasTie) {
+            this.applyAround(b.tieProbe, b.tieProbe + 1, "", start, end);
           } else {
             this.applyAround(end, end, "-", start, end);
           }
         },
-        { active: hasTie }
+        { active: b.hasTie }
       )
     );
 
     return row;
+  }
+
+  private bindingState(start: number, end: number): {
+    leftStart: number;
+    rightStart: number;
+    tieProbe: number;
+    hasTriplet: boolean;
+    hasSlurStart: boolean;
+    hasSlurEnd: boolean;
+    hasTie: boolean;
+  } {
+    const v = this.doc.value;
+
+    let leftStart = start;
+    while (leftStart > 0 && (v[leftStart - 1] === " " || v[leftStart - 1] === "\t")) {
+      leftStart--;
+    }
+    const hasTriplet =
+      leftStart >= 2 &&
+      v[leftStart - 2] === "(" &&
+      v[leftStart - 1] === "3";
+    const hasSlurStart =
+      !hasTriplet &&
+      leftStart >= 1 &&
+      v[leftStart - 1] === "(" &&
+      !(leftStart < v.length && /[0-9]/.test(v[leftStart] ?? ""));
+
+    let rightStart = end;
+    while (rightStart < v.length && (v[rightStart] === " " || v[rightStart] === "\t")) {
+      rightStart++;
+    }
+    const hasSlurEnd = v[rightStart] === ")";
+    let tieProbe = rightStart;
+    if (v[tieProbe] === ")") tieProbe++;
+    while (tieProbe < v.length && (v[tieProbe] === " " || v[tieProbe] === "\t")) tieProbe++;
+    const hasTie = v[tieProbe] === "-";
+
+    return {
+      leftStart,
+      rightStart,
+      tieProbe,
+      hasTriplet,
+      hasSlurStart,
+      hasSlurEnd,
+      hasTie
+    };
   }
 
   // ------------------------------------------------------------------
@@ -601,7 +1023,7 @@ export class PropertyPanel {
     onChange: (n: number, d: number) => void
   ): HTMLElement {
     const row = el("div", { class: "abc-gui-row" }, [
-      el("span", { class: "abc-gui-label" }, ["Length"])
+      el("span", { class: "abc-gui-label" }, ["Length (1..9)"])
     ]);
     // Buttons express ABSOLUTE note durations (whole, half, quarter, …) so
     // the glyph the user sees matches the actual rhythmic value regardless
@@ -675,10 +1097,10 @@ export class PropertyPanel {
     const dottedBase = this.dottedBaseRelativeAt(offsetInDoc, num, den);
     const isDotted = !!dottedBase;
     return el("div", { class: "abc-gui-row" }, [
-      el("span", { class: "abc-gui-label" }, ["Dot"]),
+      el("span", { class: "abc-gui-label" }, ["Dot (.)"]),
       button(
         "·",
-        "toggle dotted length (×3/2)",
+        "toggle dotted length (×3/2) (shortcut: .)",
         () => {
           if (dottedBase) onChange(dottedBase.num, dottedBase.den);
           else onChange(num * 3, den * 2);
@@ -778,6 +1200,21 @@ export class PropertyPanel {
       };
       placeSel.addEventListener("change", fire);
       textInput.addEventListener("change", fire);
+      textInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          // Let blur trigger the existing `change` commit exactly once.
+          this.focusEditorFromPanel();
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          // Revert uncommitted text edits before leaving the field.
+          textInput.value = a.text;
+          placeSel.value = a.placement;
+          this.focusEditorFromPanel();
+        }
+      });
       const removeBtn = button("✕", "remove", () => {
         const next = cloneAnnotations(prefix);
         next.annotations.splice(idx, 1);
@@ -786,7 +1223,7 @@ export class PropertyPanel {
       annoRow.append(placeSel, textInput, removeBtn);
     });
     annoRow.append(
-      button('＋"…"', "add chord symbol or annotation", () => {
+      button('＋"…"', "add chord symbol or annotation (shortcut: +)", () => {
         const next = cloneAnnotations(prefix);
         this.pendingAnnotationFocusIndex = next.annotations.length;
         next.annotations.push({ raw: '""', placement: "", text: "" });
@@ -805,10 +1242,13 @@ export class PropertyPanel {
     ]);
     for (const d of DECORATIONS) {
       const isActive = prefix.decorations.includes(d.name);
+      const shortcutHint = "";
       decoRow.append(
         button(
           d.symbol,
-          isActive ? `remove ${d.title}` : `add ${d.title}`,
+          isActive
+            ? `remove ${d.title}${shortcutHint}`
+            : `add ${d.title}${shortcutHint}`,
           () => {
             const next = cloneDecorations(prefix);
             if (isActive) {
@@ -1123,6 +1563,35 @@ export class PropertyPanel {
     this.current = { startChar: newStart, endChar: newEnd };
     this.render();
   }
+
+  private focusEditorFromPanel(): void {
+    const root = this.host.closest(".abc-gui-root") as HTMLElement | null;
+    if (!root) return;
+    const focusOnce = () => {
+      const svg = root.querySelector(".abc-gui-score svg") as SVGElement | null;
+      if (svg) {
+        if (!svg.hasAttribute("tabindex")) svg.setAttribute("tabindex", "-1");
+        const focusFn = (svg as unknown as { focus?: (opts?: FocusOptions) => void }).focus;
+        if (typeof focusFn === "function") {
+          try {
+            focusFn.call(svg, { preventScroll: true });
+          } catch {
+            focusFn.call(svg);
+          }
+          return;
+        }
+      }
+      try {
+        root.focus({ preventScroll: true });
+      } catch {
+        root.focus();
+      }
+    };
+    // Focus now, and retry after DOM updates that happen on change/re-render.
+    focusOnce();
+    queueMicrotask(focusOnce);
+    setTimeout(focusOnce, 40);
+  }
 }
 
 function kindLabel(k: string): string {
@@ -1167,6 +1636,104 @@ const ABSOLUTE_LENGTH_PRESETS: {
   { num: 1, den: 16, glyph: "𝅘𝅥𝅯", title: "sixteenth" },
   { num: 1, den: 32, glyph: "𝅘𝅥𝅰", title: "thirty-second" }
 ];
+
+const LENGTH_SHORTCUT_FRACTIONS: { num: number; den: number }[] = [
+  { num: 16, den: 1 },
+  { num: 8, den: 1 },
+  { num: 4, den: 1 },
+  { num: 2, den: 1 },
+  { num: 1, den: 1 },
+  { num: 1, den: 2 },
+  { num: 1, den: 4 },
+  { num: 1, den: 8 },
+  { num: 1, den: 16 }
+];
+
+function transposeParsedNote(note: ParsedNote, semitoneDelta: number): ParsedNote {
+  const midi = parsedNoteToMidi(note);
+  const nextMidi = midi + semitoneDelta;
+  const { letter, accidental, octave } = midiToParsedPitch(nextMidi);
+  return { ...note, letter, accidental, octave };
+}
+
+function parsedNoteToMidi(note: ParsedNote): number {
+  const base = basePitchClass(note.letter);
+  return note.octave * 12 + base + accidentalDelta(note.accidental);
+}
+
+function midiToParsedPitch(midi: number): {
+  letter: string;
+  accidental: Accidental;
+  octave: number;
+} {
+  const octave = Math.floor(midi / 12);
+  const pc = ((midi % 12) + 12) % 12;
+  switch (pc) {
+    case 0: return { letter: "C", accidental: "", octave };
+    case 1: return { letter: "C", accidental: "^", octave };
+    case 2: return { letter: "D", accidental: "", octave };
+    case 3: return { letter: "D", accidental: "^", octave };
+    case 4: return { letter: "E", accidental: "", octave };
+    case 5: return { letter: "F", accidental: "", octave };
+    case 6: return { letter: "F", accidental: "^", octave };
+    case 7: return { letter: "G", accidental: "", octave };
+    case 8: return { letter: "G", accidental: "^", octave };
+    case 9: return { letter: "A", accidental: "", octave };
+    case 10: return { letter: "A", accidental: "^", octave };
+    default: return { letter: "B", accidental: "", octave };
+  }
+}
+
+function accidentalDelta(acc: Accidental): number {
+  switch (acc) {
+    case "^^": return 2;
+    case "^": return 1;
+    case "_": return -1;
+    case "__": return -2;
+    default: return 0;
+  }
+}
+
+function basePitchClass(letter: string): number {
+  switch (letter.toUpperCase()) {
+    case "C": return 0;
+    case "D": return 2;
+    case "E": return 4;
+    case "F": return 5;
+    case "G": return 7;
+    case "A": return 9;
+    default: return 11;
+  }
+}
+
+const DIATONIC_LETTERS = ["C", "D", "E", "F", "G", "A", "B"];
+
+/**
+ * Step a note one diatonic position up/down. The new note carries no
+ * explicit accidental — the prevailing key signature governs its pitch,
+ * which yields a half- or whole-step movement as the scale dictates.
+ *
+ * Octave numbering matches the parser: stepping past B raises the octave,
+ * stepping below C lowers it.
+ */
+function diatonicStepNote(note: ParsedNote, dir: 1 | -1): ParsedNote {
+  const i = DIATONIC_LETTERS.indexOf(note.letter.toUpperCase());
+  const ni = i + dir;
+  let nextLetter: string;
+  let nextOctave = note.octave;
+  if (ni < 0) {
+    nextLetter = DIATONIC_LETTERS[6]!;
+    nextOctave -= 1;
+  } else if (ni > 6) {
+    nextLetter = DIATONIC_LETTERS[0]!;
+    nextOctave += 1;
+  } else {
+    nextLetter = DIATONIC_LETTERS[ni]!;
+  }
+  // Leave accidental empty so the key signature applies to the new letter,
+  // producing a half-step only when the scale requires it.
+  return { ...note, accidental: "", letter: nextLetter, octave: nextOctave };
+}
 
 function cloneAnnotations(p: ElementPrefix): ElementPrefix {
   return { ...p, annotations: p.annotations.map((a) => ({ ...a })) };

@@ -52,6 +52,8 @@ interface InsertSpec {
   /** true → insert before the selection by default; Shift inserts after
    *  (reverses the normal Shift-to-insert-before convention). */
   defaultBefore?: boolean;
+  /** keyboard keys that trigger this insertion. */
+  hotkeys?: string[];
 }
 
 export class Toolbar {
@@ -63,6 +65,8 @@ export class Toolbar {
   private playBtn: HTMLButtonElement | null = null;
   private stopBtn: HTMLButtonElement | null = null;
   private rawSelectBtn: HTMLButtonElement | null = null;
+  private insertSpecs: ReadonlyArray<InsertSpec> = [];
+  private headerSpecs: ReadonlyArray<InsertSpec> = [];
 
   constructor(host: HTMLElement, deps: ToolbarDeps) {
     this.host = host;
@@ -83,7 +87,11 @@ export class Toolbar {
     const redoBtn = button("↷", "redo (Ctrl+Shift+Z)", () => this.deps.doc.redo());
     this.undoBtn = undoBtn;
     this.redoBtn = redoBtn;
-    const deleteBtn = button("✖", "delete selected element", () => this.deleteSelection());
+    const deleteBtn = button(
+      "✖",
+      "delete selected element (Delete: select next, Backspace: select previous)",
+      () => this.deleteSelection()
+    );
     this.deleteBtn = deleteBtn;
     const historyGroup = el("div", { class: "abc-gui-group", title: "History" });
     historyGroup.append(undoBtn, redoBtn, deleteBtn);
@@ -111,7 +119,121 @@ export class Toolbar {
     const modeGroup = el("div", { class: "abc-gui-group", title: "Modes" });
     modeGroup.append(rawSelectBtn);
 
-    const shiftHint = " (hold Shift to insert before selection)";
+    const shiftHint = " (Shift: insert before selection)";
+
+    this.insertSpecs = [
+      {
+        glyph: "♪",
+        title: "insert note (N; inserts C)" + shiftHint,
+        snippet: "C",
+        hotkeys: ["N"]
+      },
+      {
+        glyph: "𝄽",
+        title: "insert rest (Z)" + shiftHint,
+        snippet: "z",
+        hotkeys: ["Z"]
+      },
+      {
+        glyph: "[♪]",
+        title: "insert chord (H)" + shiftHint,
+        snippet: "[CEG]",
+        hotkeys: ["H"]
+      },
+      {
+        glyph: "∣",
+        title: "insert bar line (I)" + shiftHint,
+        snippet: "|",
+        hotkeys: ["I"]
+      },
+      { glyph: "‖", title: "insert double bar" + shiftHint, snippet: "||" },
+      {
+        glyph: "|:",
+        title: "insert start-repeat ([); default is before, Shift inserts after",
+        snippet: "|:",
+        defaultBefore: true,
+        hotkeys: ["[", "{"]
+      },
+      {
+        glyph: ":|",
+        title: "insert end-repeat (])" + shiftHint,
+        snippet: ":|",
+        hotkeys: ["]", "}"]
+      },
+      {
+        glyph: "↵",
+        title: "insert line break (Enter; split current line at selection); Shift+Enter removes nearest line break",
+        snippet: "\n",
+        lineBreak: true,
+        hotkeys: ["Enter"]
+      }
+    ];
+
+    this.headerSpecs = [
+      {
+        glyph: "X:",
+        title: "new tune header (X)" + shiftHint,
+        snippet: "X:1\nT:Untitled\nM:4/4\nL:1/8\nK:C",
+        infoField: true,
+        hotkeys: ["X"]
+      },
+      {
+        glyph: "T:",
+        title: "insert title field (T)" + shiftHint,
+        snippet: "T:Title",
+        infoField: true,
+        hotkeys: ["T"]
+      },
+      {
+        glyph: "C:",
+        title: "insert composer field (C)" + shiftHint,
+        snippet: "C:Composer",
+        infoField: true,
+        hotkeys: ["C"]
+      },
+      {
+        glyph: "R:",
+        title: "insert rhythm field (R)" + shiftHint,
+        snippet: "R:Rhythm",
+        infoField: true,
+        hotkeys: ["R"]
+      },
+      {
+        glyph: "K:",
+        title: "insert key field (K)" + shiftHint,
+        snippet: "K:C",
+        infoField: true,
+        hotkeys: ["K"]
+      },
+      {
+        glyph: "M:",
+        title: "insert meter field (M)" + shiftHint,
+        snippet: "M:4/4",
+        infoField: true,
+        hotkeys: ["M"]
+      },
+      {
+        glyph: "L:",
+        title: "insert unit length field (L)" + shiftHint,
+        snippet: "L:1/8",
+        infoField: true,
+        hotkeys: ["L"]
+      },
+      {
+        glyph: "Q:",
+        title: "insert tempo field (Q)" + shiftHint,
+        snippet: "Q:1/4=120",
+        infoField: true,
+        hotkeys: ["Q"]
+      },
+      {
+        glyph: "V:",
+        title: "insert voice field (V)" + shiftHint,
+        snippet: "V:1",
+        infoField: true,
+        hotkeys: ["V"]
+      }
+    ];
 
     this.host.append(
       historyGroup,
@@ -121,38 +243,19 @@ export class Toolbar {
       // properties — accidentals, length, ties, slurs, triplets, grace
       // notes, chord symbols, annotations, and decorations — are edited
       // via the property panel of the selected note instead.
-      this.group("Insert", [
-        { glyph: "♪", title: "insert note (C)" + shiftHint, snippet: "C" },
-        { glyph: "𝄽", title: "insert rest" + shiftHint, snippet: "z" },
-        { glyph: "[♪]", title: "insert chord" + shiftHint, snippet: "[CEG]" },
-        { glyph: "∣", title: "insert bar line" + shiftHint, snippet: "|" },
-        { glyph: "‖", title: "insert double bar" + shiftHint, snippet: "||" },
-        { glyph: "|:", title: "insert start-repeat (hold Shift to insert after selection)", snippet: "|:", defaultBefore: true },
-        { glyph: ":|", title: "insert end-repeat" + shiftHint, snippet: ":|" },
-        {
-          glyph: "↵",
-          title: "insert line break (split current line at the selection); hold Shift to remove the nearest line break instead",
-          snippet: "\n",
-          lineBreak: true
-        }
-      ]),
-      this.group("Header", [
-        {
-          glyph: "X:",
-          title: "new tune header" + shiftHint,
-          snippet: "X:1\nT:Untitled\nM:4/4\nL:1/8\nK:C",
-          infoField: true
-        },
-        { glyph: "T:", title: "insert title field" + shiftHint, snippet: "T:Title", infoField: true },
-        { glyph: "C:", title: "insert composer field" + shiftHint, snippet: "C:Composer", infoField: true },
-        { glyph: "R:", title: "insert rhythm field" + shiftHint, snippet: "R:Rhythm", infoField: true },
-        { glyph: "K:", title: "insert key field" + shiftHint, snippet: "K:C", infoField: true },
-        { glyph: "M:", title: "insert meter field" + shiftHint, snippet: "M:4/4", infoField: true },
-        { glyph: "L:", title: "insert unit length field" + shiftHint, snippet: "L:1/8", infoField: true },
-        { glyph: "Q:", title: "insert tempo field" + shiftHint, snippet: "Q:1/4=120", infoField: true },
-        { glyph: "V:", title: "insert voice field" + shiftHint, snippet: "V:1", infoField: true }
-      ])
+      this.group("Insert", this.insertSpecs),
+      this.group("Header", this.headerSpecs)
     );
+  }
+
+  /** Trigger one of the insert/header actions via keyboard hotkey. */
+  handleShortcut(key: string, shiftKey: boolean): boolean {
+    const norm = key.length === 1 ? key.toUpperCase() : key;
+    const allSpecs = [...this.insertSpecs, ...this.headerSpecs];
+    const spec = allSpecs.find((s) => s.hotkeys?.includes(norm));
+    if (!spec) return false;
+    this.insert(spec, spec.defaultBefore ? !shiftKey : shiftKey);
+    return true;
   }
 
   private updateHistoryButtons(): void {
@@ -208,6 +311,10 @@ export class Toolbar {
     const src = doc.value;
 
     if (spec.lineBreak) {
+      const anchor = sel ? (before ? sel.startChar : sel.endChar) : src.length;
+      if (!this.isMusicLineAnchor(src, anchor)) {
+        return;
+      }
       if (before) {
         // Shift: remove the newline closest to the current selection range.
         const rangeStart = sel ? Math.min(sel.startChar, sel.endChar) : src.length;
@@ -229,7 +336,9 @@ export class Toolbar {
       }
       // A bare line break: just insert the snippet at the current position.
       // No wrapping — the snippet IS the newline.
-      const anchor = sel ? (before ? sel.startChar : sel.endChar) : src.length;
+      if (this.wouldCreateEmptyLine(src, anchor)) {
+        return;
+      }
       doc.replace(anchor, anchor, spec.snippet);
       const afterBreak = anchor + spec.snippet.length;
       const next = this.findNextElementAfter(afterBreak);
@@ -291,5 +400,31 @@ export class Toolbar {
       }
     });
     return best;
+  }
+
+  /** True when `anchor` sits on a line that contains parsed music elements. */
+  private isMusicLineAnchor(src: string, anchor: number): boolean {
+    const clamped = Math.max(0, Math.min(anchor, src.length));
+    const probe = clamped === src.length && clamped > 0 ? clamped - 1 : clamped;
+
+    let lineStart = probe;
+    while (lineStart > 0 && src[lineStart - 1] !== "\n") lineStart--;
+    let lineEnd = probe;
+    while (lineEnd < src.length && src[lineEnd] !== "\n") lineEnd++;
+
+    let hasMusic = false;
+    this.deps.doc.forEachElement((el) => {
+      if (hasMusic) return;
+      if (el.startChar >= lineStart && el.startChar < lineEnd) hasMusic = true;
+    });
+    return hasMusic;
+  }
+
+  /** Splitting at start/end of a line would create an empty line. */
+  private wouldCreateEmptyLine(src: string, anchor: number): boolean {
+    if (anchor < 0 || anchor > src.length) return true;
+    const leftIsBreak = anchor > 0 && src[anchor - 1] === "\n";
+    const rightIsBreak = anchor < src.length && src[anchor] === "\n";
+    return leftIsBreak || rightIsBreak;
   }
 }
