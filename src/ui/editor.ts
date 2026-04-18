@@ -145,7 +145,40 @@ export class AbcEditor {
   // Internal -----------------------------------------------------
 
   private handleScoreClick(ev: SelectionEvent): void {
-    this.select({ startChar: ev.startChar, endChar: ev.endChar }, ev.classes);
+    // abcjs reports clef / key-signature / time-signature / tempo /
+    // metadata clicks with a range that sits inside (or equals) the
+    // underlying `K:` / `M:` / `Q:` / `[K:...]` source. The raw range by
+    // itself doesn't match any editor in the property panel, so snap
+    // selections that land inside a header line or inline field up to the
+    // whole field. This keeps notes / bars / rests unchanged because they
+    // live in music-body lines where `infoLineAt` returns null.
+    let startChar = ev.startChar;
+    let endChar = ev.endChar;
+
+    // Guard: some abcelem types (e.g. pure metadata) report -1/-1. Try to
+    // recover by treating the click as unlocated and bail out silently.
+    if (startChar < 0 || endChar < 0 || endChar < startChar) {
+      this.select(null, ev.classes);
+      return;
+    }
+
+    const inline = this.doc.inlineFieldAt(startChar);
+    if (
+      inline &&
+      startChar >= inline.startChar &&
+      endChar <= inline.endChar
+    ) {
+      startChar = inline.startChar;
+      endChar = inline.endChar;
+    } else {
+      const info = this.doc.infoLineAt(startChar);
+      if (info && startChar >= info.startChar && endChar <= info.endChar) {
+        startChar = info.startChar;
+        endChar = info.endChar;
+      }
+    }
+
+    this.select({ startChar, endChar }, ev.classes);
   }
 
   private handleRawCaret(start: number, end: number): void {

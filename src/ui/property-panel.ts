@@ -31,8 +31,7 @@ import {
   ACCIDENTAL_GLYPH,
   Accidental,
   BAR_TYPES,
-  DECORATIONS,
-  LENGTH_PRESETS
+  DECORATIONS
 } from "../parser/element.js";
 import { el, clear, button } from "./dom.js";
 
@@ -181,7 +180,7 @@ export class PropertyPanel {
       this.pitchRow(parsed.letter, (l) => apply({ letter: l })),
       this.octaveRow(parsed.octave, (o) => apply({ octave: o })),
       this.unitLengthInfoRow(start, parsed.num, parsed.den),
-      this.lengthRow(parsed.num, parsed.den, (n, d) =>
+      this.lengthRow(start, parsed.num, parsed.den, (n, d) =>
         apply({ num: n, den: d })
       ),
       this.dotRow(parsed.num, parsed.den, (n, d) => apply({ num: n, den: d }))
@@ -198,7 +197,7 @@ export class PropertyPanel {
     this.host.append(
       el("div", { class: "abc-gui-section-title" }, ["Chord length"]),
       this.unitLengthInfoRow(start, parsed.num, parsed.den),
-      this.lengthRow(parsed.num, parsed.den, (n, d) => {
+      this.lengthRow(start, parsed.num, parsed.den, (n, d) => {
         applyChord({ ...parsed, num: n, den: d });
       }),
       this.dotRow(parsed.num, parsed.den, (n, d) => {
@@ -284,7 +283,7 @@ export class PropertyPanel {
     this.host.append(
       variantRow,
       this.unitLengthInfoRow(start, parsed.num, parsed.den),
-      this.lengthRow(parsed.num, parsed.den, (n, d) =>
+      this.lengthRow(start, parsed.num, parsed.den, (n, d) =>
         apply({ num: n, den: d })
       )
     );
@@ -439,6 +438,7 @@ export class PropertyPanel {
   }
 
   private lengthRow(
+    offsetInDoc: number,
     num: number,
     den: number,
     onChange: (n: number, d: number) => void
@@ -446,14 +446,28 @@ export class PropertyPanel {
     const row = el("div", { class: "abc-gui-row" }, [
       el("span", { class: "abc-gui-label" }, ["Length"])
     ]);
-    for (const p of LENGTH_PRESETS) {
+    // Buttons express ABSOLUTE note durations (whole, half, quarter, …) so
+    // the glyph the user sees matches the actual rhythmic value regardless
+    // of the effective `L:` directive. The stored value in the source is
+    // always the ratio relative to L:, so we convert both ways here.
+    const L = this.doc.unitLengthAt(offsetInDoc);
+    const g0 = gcd(num * L.num, den * L.den);
+    const absNum = (num * L.num) / g0;
+    const absDen = (den * L.den) / g0;
+    for (const p of ABSOLUTE_LENGTH_PRESETS) {
+      // relative length = absolute ÷ L
+      const relN = p.num * L.den;
+      const relD = p.den * L.num;
+      const gr = gcd(relN, relD);
+      const rn = relN / gr;
+      const rd = relD / gr;
       row.append(
-        button(p.glyph, p.title, () => onChange(p.num, p.den), {
-          active: p.num === num && p.den === den
+        button(p.glyph, `${p.title} (= ${rn}/${rd} × L)`, () => onChange(rn, rd), {
+          active: p.num === absNum && p.den === absDen
         })
       );
     }
-    // Free-form
+    // Free-form (still relative to L:, matching the stored source form).
     const numInput = el("input", {
       class: "abc-gui-input abc-gui-input-small",
       value: String(num),
@@ -806,6 +820,28 @@ function gcd(a: number, b: number): number {
   }
   return a || 1;
 }
+
+/**
+ * Length presets expressed as ABSOLUTE note durations (fraction of a whole
+ * note). The property panel converts these to/from the relative `num/den`
+ * stored in the ABC source using the effective `L:` at the note's position,
+ * so the glyph a user sees on an active button always matches the note's
+ * audible/visual duration — even when `L:` changes mid-tune.
+ */
+const ABSOLUTE_LENGTH_PRESETS: {
+  num: number;
+  den: number;
+  glyph: string;
+  title: string;
+}[] = [
+  { num: 2, den: 1, glyph: "𝅜", title: "breve (double whole)" },
+  { num: 1, den: 1, glyph: "𝅝", title: "whole" },
+  { num: 1, den: 2, glyph: "𝅗𝅥", title: "half" },
+  { num: 1, den: 4, glyph: "♩", title: "quarter" },
+  { num: 1, den: 8, glyph: "♪", title: "eighth" },
+  { num: 1, den: 16, glyph: "𝅘𝅥𝅯", title: "sixteenth" },
+  { num: 1, den: 32, glyph: "𝅘𝅥𝅰", title: "thirty-second" }
+];
 
 function cloneAnnotations(p: ElementPrefix): ElementPrefix {
   return { ...p, annotations: p.annotations.map((a) => ({ ...a })) };

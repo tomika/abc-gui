@@ -89,6 +89,12 @@ export class ScoreView {
       // clicks on note/tabNumber, which means clefs, key & meter signatures,
       // bar lines, tempo, metadata, decorations, etc. are silently ignored.
       selectTypes: true,
+      // Align abcjs's own click-highlight color with the CSS highlight we
+      // apply via `.abc-gui-selected`. Without this, abcjs paints clef /
+      // key-sig / bar hits in its default red (via direct `fill=`
+      // attributes on child paths) while notes still look blue because
+      // our CSS class lands on the whole group.
+      selectionColor: "#1659c7",
       clickListener: (
         abcelem: {
           startChar?: number;
