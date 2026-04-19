@@ -284,8 +284,11 @@ export class PropertyPanel {
     const trailingWs = raw.match(/\s*$/)![0].length;
     const inner = raw.slice(leadingWs, raw.length - trailingWs);
     const prefix = readPrefix(inner, 0);
-    const coreStart = startChar + leadingWs + prefix.end;
-    const coreEnd = endChar - trailingWs;
+    const prefixEnd = startChar + leadingWs + prefix.end;
+    const rawCoreEnd = endChar - trailingWs;
+    const coreRange = this.normalizeCoreRange(prefixEnd, rawCoreEnd);
+    const coreStart = coreRange.coreStart;
+    const coreEnd = coreRange.coreEnd;
     const core = this.doc.slice(coreStart, coreEnd);
     const kind = this.classify(core);
 
@@ -329,15 +332,15 @@ export class PropertyPanel {
       // OUTSIDE the element span abcjs reports, so we edit them through
       // the document directly while keeping the element selected.
       this.host.append(this.separator());
-      this.host.append(this.bindingRow(startChar, endChar));
+      this.host.append(this.bindingRow(coreStart, coreEnd));
       // Attached chord symbols / annotations / decorations / grace notes.
       this.host.append(this.separator());
       this.host.append(
-        this.prefixEditor(prefix, coreStart, (next) => {
+        this.prefixEditor(prefix, prefixEnd, (next) => {
           const prefixText = writePrefix(next);
-          // Replace the old prefix region (from startChar up to coreStart)
+          // Replace the old prefix region (from startChar up to prefixEnd)
           // with the newly-serialized one.
-          this.applyRange(startChar, coreStart, prefixText);
+          this.applyRange(startChar, prefixEnd, prefixText);
         })
       );
     }
@@ -359,11 +362,57 @@ export class PropertyPanel {
     const trailingWs = raw.match(/\s*$/)![0].length;
     const inner = raw.slice(leadingWs, raw.length - trailingWs);
     const prefix = readPrefix(inner, 0);
-    const coreStart = selStart + leadingWs + prefix.end;
-    const coreEnd = selEnd - trailingWs;
+    const prefixEnd = selStart + leadingWs + prefix.end;
+    const rawCoreEnd = selEnd - trailingWs;
+    const coreRange = this.normalizeCoreRange(prefixEnd, rawCoreEnd);
+    const coreStart = coreRange.coreStart;
+    const coreEnd = coreRange.coreEnd;
     const core = this.doc.slice(coreStart, coreEnd);
     const kind = this.classify(core);
     return { selStart, selEnd, coreStart, coreEnd, core, kind, prefix };
+  }
+
+  /**
+   * abcjs usually reports binding markers (tuplet/slur/tie) outside an
+   * element span, but in some cases a marker can be included in the
+   * selected range (e.g. "(e"). Exclude those wrappers from the editable
+   * core so note/chord/rest parsing still works.
+   */
+  private normalizeCoreRange(
+    coreStart: number,
+    coreEnd: number
+  ): { coreStart: number; coreEnd: number } {
+    const v = this.doc.value;
+    let s = coreStart;
+    let e = coreEnd;
+
+    const tupletLen = this.parseTupletMarkerLengthAt(s, e);
+    if (tupletLen > 0) s += tupletLen;
+    if (s < e && v[s] === "(") s += 1;
+
+    if (e > s && v[e - 1] === "-") e -= 1;
+    if (e > s && v[e - 1] === ")") e -= 1;
+
+    return { coreStart: s, coreEnd: e };
+  }
+
+  /** Parse tuplet marker length at `start`: (p), (p:q), or (p:q:r). */
+  private parseTupletMarkerLengthAt(start: number, end: number): number {
+    const v = this.doc.value;
+    if (start >= end || v[start] !== "(") return 0;
+    let i = start + 1;
+    let digitsStart = i;
+    while (i < end && /[0-9]/.test(v[i]!)) i++;
+    if (i === digitsStart) return 0;
+    let parts = 1;
+    while (parts < 3 && i < end && v[i] === ":") {
+      i++;
+      digitsStart = i;
+      while (i < end && /[0-9]/.test(v[i]!)) i++;
+      if (i === digitsStart) return 0;
+      parts++;
+    }
+    return i - start;
   }
 
   private applyPitchLetterShortcut(
@@ -603,7 +652,7 @@ export class PropertyPanel {
     if (!(ctx.kind === "note" || ctx.kind === "chord" || ctx.kind === "rest")) {
       return false;
     }
-    const b = this.bindingState(ctx.selStart, ctx.selEnd);
+    const b = this.bindingState(ctx.coreStart, ctx.coreEnd);
     if (key === "(") {
       if (b.hasSlurStart) {
         this.applyAround(b.leftStart - 1, b.leftStart, "", ctx.selStart, ctx.selEnd);
