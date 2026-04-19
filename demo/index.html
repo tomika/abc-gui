@@ -117,14 +117,14 @@
 </style>
 </head>
 <body>
-<h1>abc-gui WYSIWYG editor — demo</h1>
-<p>Click any element in the rendered score to edit its properties.</p>
+<h1 id="demo-title">abc-gui WYSIWYG editor — demo</h1>
+<p id="demo-intro">Click any element in the rendered score to edit its properties.</p>
 
 <div class="demo-bar">
-  <span>Language:</span>
+  <span id="label-language">Language:</span>
   <button id="lang-en" title="English">🇬🇧 English</button>
   <button id="lang-hu" title="Magyar">🇭🇺 Magyar</button>
-  <span style="margin-left:12px;">Theme:</span>
+  <span id="label-theme" style="margin-left:12px;">Theme:</span>
   <button id="theme-toggle" title="Toggle dark mode">🌙 Dark</button>
   <button id="help-btn" title="Show tutorial" style="margin-left:12px;">❓ Help</button>
 </div>
@@ -133,8 +133,8 @@
 
 <div id="splash" class="demo-splash" hidden>
   <div class="demo-splash-card" role="dialog" aria-modal="true" aria-labelledby="splash-title">
-    <h2>abc-gui — quick tutorial</h2>
-    <p>This is a WYSIWYG editor for <a href="https://abcnotation.com/wiki/abc:standard:v2.1" target="_blank" rel="noopener">ABC music notation</a>. Edit the score visually or via its raw text.</p>
+    <h2 id="splash-title">abc-gui — quick tutorial</h2>
+    <p id="splash-intro">This is a WYSIWYG editor for <a href="https://abcnotation.com/wiki/abc:standard:v2.1" target="_blank" rel="noopener">ABC music notation</a>. Edit the score visually or via its raw text.</p>
     <div id="splash-content"></div>
     <div class="demo-splash-actions">
       <button id="splash-close">Got it</button>
@@ -142,7 +142,7 @@
   </div>
 </div>
 
-<h3>onChange callback output</h3>
+<h3 id="log-title">onChange callback output</h3>
 <pre id="log"></pre>
 
 <script src="../dist/index.iife.js"></script>
@@ -151,8 +151,8 @@
     "X:1",
     "T:Example",
     "C:Anonymous",
-    "M:4/4",
-    "L:1/8",
+"M:4/4",
+"L:1/8",
     "Q:1/4=120",
     "K:G",
     '"G"GABc d2ef|"D"g2fe d2cB|"Em"A2GF E2D2|"G"[GBd]4 z2 z2|'
@@ -181,36 +181,117 @@
   });
   document.getElementById("log").textContent = editor.getValue();
 
+  const DEMO_STRINGS = {
+    en: {
+      docLang: "en",
+      pageTitle: "abc-gui demo",
+      heading: "abc-gui WYSIWYG editor — demo",
+      intro: "Click any element in the rendered score to edit its properties.",
+      languageLabel: "Language:",
+      themeLabel: "Theme:",
+      englishTitle: "English",
+      hungarianTitle: "Hungarian",
+      themeToggleTitle: "Toggle dark mode",
+      themeLight: "☀️ Light",
+      themeDark: "🌙 Dark",
+      helpTitle: "Show tutorial",
+      helpButton: "❓ Help",
+      splashTitle: "abc-gui — quick tutorial",
+      splashIntroHtml: "This is a WYSIWYG editor for <a href=\"https://abcnotation.com/wiki/abc:standard:v2.1\" target=\"_blank\" rel=\"noopener\">ABC music notation</a>. Edit the score visually or via its raw text.",
+      splashClose: "Got it",
+      logTitle: "onChange callback output"
+    },
+    hu: {
+      docLang: "hu",
+      pageTitle: "abc-gui demo",
+      heading: "abc-gui WYSIWYG szerkesztő — demo",
+      intro: "Kattints bármelyik elemre a megjelenített kottában a tulajdonságok szerkesztéséhez.",
+      languageLabel: "Nyelv:",
+      themeLabel: "Téma:",
+      englishTitle: "Angol",
+      hungarianTitle: "Magyar",
+      themeToggleTitle: "Sötét mód váltása",
+      themeLight: "☀️ Világos",
+      themeDark: "🌙 Sötét",
+      helpTitle: "Útmutató megnyitása",
+      helpButton: "❓ Súgó",
+      splashTitle: "abc-gui — gyors útmutató",
+      splashIntroHtml: "Ez egy WYSIWYG szerkesztő az <a href=\"https://abcnotation.com/wiki/abc:standard:v2.1\" target=\"_blank\" rel=\"noopener\">ABC kottaíráshoz</a>. A kottát vizuálisan vagy nyers szövegként is szerkesztheted.",
+      splashClose: "Rendben",
+      logTitle: "onChange callback kimenete"
+    }
+  };
+
+  const demoTitle = document.getElementById("demo-title");
+  const demoIntro = document.getElementById("demo-intro");
+  const languageLabel = document.getElementById("label-language");
+  const themeLabel = document.getElementById("label-theme");
+  const logTitle = document.getElementById("log-title");
+
   // Language switcher -----------------------------------------------
   const enBtn = document.getElementById("lang-en");
   const huBtn = document.getElementById("lang-hu");
+  const themeBtn = document.getElementById("theme-toggle");
+  const splash = document.getElementById("splash");
+  const splashContent = document.getElementById("splash-content");
+  const splashTitle = document.getElementById("splash-title");
+  const splashIntro = document.getElementById("splash-intro");
+  const splashClose = document.getElementById("splash-close");
+  const helpBtn = document.getElementById("help-btn");
+
+  let dark = prefersDark;
+  let currentLang = "en";
+
+  function syncThemeButton() {
+    const t = DEMO_STRINGS[currentLang] || DEMO_STRINGS.en;
+    themeBtn.textContent = dark ? t.themeLight : t.themeDark;
+    themeBtn.title = t.themeToggleTitle;
+  }
+
+  function applyDemoLang(id) {
+    const t = DEMO_STRINGS[id] || DEMO_STRINGS.en;
+    currentLang = id;
+    document.documentElement.lang = t.docLang;
+    document.title = t.pageTitle;
+    demoTitle.textContent = t.heading;
+    demoIntro.textContent = t.intro;
+    languageLabel.textContent = t.languageLabel;
+    themeLabel.textContent = t.themeLabel;
+    enBtn.title = t.englishTitle;
+    huBtn.title = t.hungarianTitle;
+    helpBtn.title = t.helpTitle;
+    helpBtn.textContent = t.helpButton;
+    splashTitle.textContent = t.splashTitle;
+    splashIntro.innerHTML = t.splashIntroHtml;
+    splashClose.textContent = t.splashClose;
+    logTitle.textContent = t.logTitle;
+    syncThemeButton();
+    if (!splash.hidden) {
+      splashContent.innerHTML = editor.getTutorialHtml();
+    }
+  }
+
   function setLang(id) {
     editor.setLocale(id);
+    applyDemoLang(id);
     enBtn.classList.toggle("active", id === "en");
     huBtn.classList.toggle("active", id === "hu");
   }
   enBtn.addEventListener("click", () => setLang("en"));
   huBtn.addEventListener("click", () => setLang("hu"));
-  setLang("en");
 
   // Theme toggle ----------------------------------------------------
-  const themeBtn = document.getElementById("theme-toggle");
-  let dark = prefersDark;
   editor.setTheme(dark ? "dark" : "light");
   document.body.classList.toggle("demo-dark", dark);
-  themeBtn.textContent = dark ? "☀️ Light" : "🌙 Dark";
+  syncThemeButton();
   themeBtn.addEventListener("click", () => {
     dark = !dark;
     editor.setTheme(dark ? "dark" : "light");
     document.body.classList.toggle("demo-dark", dark);
-    themeBtn.textContent = dark ? "☀️ Light" : "🌙 Dark";
+    syncThemeButton();
   });
 
   // Splash screen / tutorial ---------------------------------------
-  const splash = document.getElementById("splash");
-  const splashContent = document.getElementById("splash-content");
-  const splashClose = document.getElementById("splash-close");
-  const helpBtn = document.getElementById("help-btn");
   function showSplash() {
     splashContent.innerHTML = editor.getTutorialHtml();
     splash.hidden = false;
@@ -221,6 +302,9 @@
     if (e.target === splash) hideSplash();
   });
   helpBtn.addEventListener("click", showSplash);
+
+  setLang("en");
+
   // Show the tutorial splash on first visit only.
   if (!localStorage.getItem("abc-gui-demo-splash-seen")) {
     showSplash();
