@@ -28,9 +28,13 @@
   --abc-score-fill: #111;
   --abc-score-stroke: #111;
   --abc-note-selected: #1659c7;
-  --abc-panel-pane-width: 360px;
+  --abc-panel-pane-width: 336px;
   --abc-score-pane-width: 560px;
   --abc-pane-height: 360px;
+  --abc-control-size: 24px;
+  --abc-control-size-compact: 28px;
+  --abc-scrollbar-thumb: #b7bcc7;
+  --abc-scrollbar-track: #eceff4;
 
   display: flex;
   flex-direction: column;
@@ -67,6 +71,8 @@
   --abc-selection-text: #ffffff;
   --abc-score-fill: #e4e6ea;
   --abc-score-stroke: #e4e6ea;
+  --abc-scrollbar-thumb: #58606b;
+  --abc-scrollbar-track: #24272c;
   /* Pre-inverted so that after the SVG-wide `filter: invert(1)
    * hue-rotate(180deg)` in dark mode, the selection reads as a bright
    * blue in the rendered score. */
@@ -99,9 +105,9 @@
 }
 
 .abc-gui-btn {
-  min-width: 28px;
-  height: 28px;
-  padding: 0 6px;
+  min-width: var(--abc-control-size);
+  height: var(--abc-control-size);
+  padding: 0 5px;
   font-size: 14px;
   line-height: 1;
   background: var(--abc-btn-bg);
@@ -156,8 +162,10 @@
 }
 
 .abc-gui-panel-host {
-  flex: 1 1 40% !important;
-  width: auto !important;
+  /* Fixed-width panel sized for: label + 7 square buttons + gaps + padding.
+   * 70 (label) + 7*28 (buttons) + 7*4 (gaps) + 2*8 (padding) ≈ 310 → 320. */
+  flex: 0 0 var(--abc-panel-pane-width) !important;
+  width: var(--abc-panel-pane-width) !important;
   height: auto !important;
   min-width: 0;
   background: var(--abc-surface);
@@ -165,7 +173,53 @@
   border-radius: 4px;
   padding: 8px;
   box-sizing: border-box;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+/* Theme-aware scrollbars for dark/light modes. */
+.abc-gui-root,
+.abc-gui-score-host,
+.abc-gui-panel-host,
+.abc-gui-raw-host,
+.abc-gui-raw-view-textarea {
+  scrollbar-color: var(--abc-scrollbar-thumb) var(--abc-scrollbar-track);
+}
+
+.abc-gui-root::-webkit-scrollbar,
+.abc-gui-score-host::-webkit-scrollbar,
+.abc-gui-panel-host::-webkit-scrollbar,
+.abc-gui-raw-host::-webkit-scrollbar,
+.abc-gui-raw-view-textarea::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.abc-gui-root::-webkit-scrollbar-track,
+.abc-gui-score-host::-webkit-scrollbar-track,
+.abc-gui-panel-host::-webkit-scrollbar-track,
+.abc-gui-raw-host::-webkit-scrollbar-track,
+.abc-gui-raw-view-textarea::-webkit-scrollbar-track {
+  background: var(--abc-scrollbar-track);
+}
+
+.abc-gui-root::-webkit-scrollbar-thumb,
+.abc-gui-score-host::-webkit-scrollbar-thumb,
+.abc-gui-panel-host::-webkit-scrollbar-thumb,
+.abc-gui-raw-host::-webkit-scrollbar-thumb,
+.abc-gui-raw-view-textarea::-webkit-scrollbar-thumb {
+  background: var(--abc-scrollbar-thumb);
+  border-radius: 8px;
+  border: 2px solid var(--abc-scrollbar-track);
+}
+
+.abc-gui-root::-webkit-scrollbar-thumb:hover,
+.abc-gui-score-host::-webkit-scrollbar-thumb:hover,
+.abc-gui-panel-host::-webkit-scrollbar-thumb:hover,
+.abc-gui-raw-host::-webkit-scrollbar-thumb:hover,
+.abc-gui-raw-view-textarea::-webkit-scrollbar-thumb:hover {
+  filter: brightness(0.92);
 }
 
 /* Raw view is pinned below the score+panel row and spans the full width. */
@@ -285,10 +339,17 @@
 
 .abc-gui-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 4px;
   margin: 4px 0;
+  min-width: 0;
+}
+
+.abc-gui-sep {
+  border: none;
+  border-top: 1px solid var(--abc-border);
+  margin: 8px 0 4px;
 }
 
 .abc-gui-label {
@@ -311,13 +372,17 @@
 
 .abc-gui-input {
   font: inherit;
+  height: var(--abc-control-size);
   padding: 3px 6px;
   border: 1px solid var(--abc-border-strong);
   border-radius: 3px;
   background: var(--abc-btn-bg);
   color: var(--abc-text);
+  box-sizing: border-box;
+  min-width: 0;
 }
-.abc-gui-input-small { width: 48px; }
+.abc-gui-input-small { width: 40px; flex: 0 0 40px; }
+.abc-gui-input-flex { flex: 1 1 0; min-width: 0; }
 
 .abc-gui-section-title {
   margin: 8px 0 2px;
@@ -341,7 +406,7 @@
   border-bottom: none;
   background: var(--abc-surface-2);
   color: var(--abc-text-subtle);
-  min-width: 28px;
+  min-width: var(--abc-control-size);
 }
 
 .abc-gui-chord-tab.abc-gui-active {
@@ -383,14 +448,19 @@
 }
 .abc-gui-dark .abc-gui-chord-note-remove:hover { background: #3b2626; }
 
-.abc-gui-deco-row { flex-wrap: wrap; }
-.abc-gui-binding-row { flex-wrap: wrap; }
+.abc-gui-deco-row { flex-wrap: nowrap; overflow: visible; }
+.abc-gui-deco-row.abc-gui-deco-extra { margin-top: 0; }
+.abc-gui-binding-row { flex-wrap: nowrap; }
 
 @container (max-width: 600px) {
   .abc-gui-toolbar-host { padding: 4px; gap: 4px; }
   .abc-gui-group { padding: 2px; }
-  .abc-gui-btn { min-width: 32px; height: 32px; padding: 0 4px; }
-  .abc-gui-label { min-width: 0; flex-basis: 100%; }
+  .abc-gui-btn {
+    min-width: var(--abc-control-size-compact);
+    height: var(--abc-control-size-compact);
+    padding: 0 4px;
+  }
+  .abc-gui-input { height: var(--abc-control-size-compact); }
   .abc-gui-row { gap: 6px; }
   .abc-gui-body { padding: 6px; gap: 6px; }
   .abc-gui-panel-host, .abc-gui-raw-host, .abc-gui-score-host { padding: 6px; }
@@ -398,8 +468,12 @@
 @media (max-width: 600px) {
   .abc-gui-toolbar-host { padding: 4px; gap: 4px; }
   .abc-gui-group { padding: 2px; }
-  .abc-gui-btn { min-width: 32px; height: 32px; padding: 0 4px; }
-  .abc-gui-label { min-width: 0; flex-basis: 100%; }
+  .abc-gui-btn {
+    min-width: var(--abc-control-size-compact);
+    height: var(--abc-control-size-compact);
+    padding: 0 4px;
+  }
+  .abc-gui-input { height: var(--abc-control-size-compact); }
   .abc-gui-row { gap: 6px; }
   .abc-gui-body { padding: 6px; gap: 6px; }
   .abc-gui-panel-host, .abc-gui-raw-host, .abc-gui-score-host { padding: 6px; }
@@ -412,21 +486,11 @@
 }
 
 .abc-gui-raw {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--abc-border);
+  /* Row is rendered inline with label + input; separator above provides spacing. */
 }
 .abc-gui-raw-input {
-  width: 100%;
-  box-sizing: border-box;
-  min-height: 54px;
   font-family: ui-monospace, Menlo, monospace;
   font-size: 13px;
-  padding: 4px;
-  border: 1px solid var(--abc-border-strong);
-  border-radius: 3px;
-  background: var(--abc-btn-bg);
-  color: var(--abc-text);
 }
 
 .abc-gui-raw-view-textarea {

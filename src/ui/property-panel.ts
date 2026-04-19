@@ -80,6 +80,7 @@ export class PropertyPanel {
   private pendingAnnotationFocusIndex: number | null = null;
   private chordActiveTab = 0;
   private chordEditor: ChordEditorCallback | null = null;
+  private decoExpanded = false;
 
   constructor(
     host: HTMLElement,
@@ -145,6 +146,7 @@ export class PropertyPanel {
       )
     ) {
       this.chordActiveTab = 0;
+      this.decoExpanded = false;
     }
     this.current = sel;
     this.render();
@@ -299,21 +301,6 @@ export class PropertyPanel {
     const supportsPrefix =
       kind === "note" || kind === "chord" || kind === "rest";
 
-    if (supportsPrefix) {
-      this.host.append(
-        this.prefixEditor(prefix, coreStart, (next) => {
-          const prefixText = writePrefix(next);
-          // Replace the old prefix region (from startChar up to coreStart)
-          // with the newly-serialized one.
-          this.applyRange(startChar, coreStart, prefixText);
-        })
-      );
-      // Group / binding row (triplets, slurs, ties) — these tokens live
-      // OUTSIDE the element span abcjs reports, so we edit them through
-      // the document directly while keeping the element selected.
-      this.host.append(this.bindingRow(startChar, endChar));
-    }
-
     switch (kind) {
       case "note":
         this.renderNoteEditor(core, coreStart, coreEnd);
@@ -337,8 +324,30 @@ export class PropertyPanel {
         this.renderDecorationsForElement(core, coreStart, coreEnd);
     }
 
+    if (supportsPrefix) {
+      // Group / binding row (triplets, slurs, ties) — these tokens live
+      // OUTSIDE the element span abcjs reports, so we edit them through
+      // the document directly while keeping the element selected.
+      this.host.append(this.separator());
+      this.host.append(this.bindingRow(startChar, endChar));
+      // Attached chord symbols / annotations / decorations / grace notes.
+      this.host.append(this.separator());
+      this.host.append(
+        this.prefixEditor(prefix, coreStart, (next) => {
+          const prefixText = writePrefix(next);
+          // Replace the old prefix region (from startChar up to coreStart)
+          // with the newly-serialized one.
+          this.applyRange(startChar, coreStart, prefixText);
+        })
+      );
+    }
+
     // Raw fallback — always present (covers the WHOLE selection, prefix + core).
     this.host.append(this.buildRawEditor(raw, startChar, endChar));
+  }
+
+  private separator(): HTMLElement {
+    return el("hr", { class: "abc-gui-sep" });
   }
 
   private resolveSelectionContext(): SelectionContext | null {
@@ -654,10 +663,15 @@ export class PropertyPanel {
       this.applyRange(start, end, writeNote(next));
     };
     this.host.append(
+      el("div", { class: "abc-gui-section-title" }, [this.strings.panel.section.note]),
       this.accidentalRow(parsed.accidental, (a) => apply({ accidental: a })),
       this.pitchRow(parsed.letter, (l) => apply({ letter: l })),
       this.octaveRow(parsed.octave, (o) => apply({ octave: o })),
-      this.unitLengthInfoRow(start, parsed.num, parsed.den),
+      this.separator(),
+      el("div", { class: "abc-gui-section-title" }, [this.strings.panel.section.noteLength]),
+      this.unitLengthInfoRow(start, parsed.num, parsed.den, (n, d) =>
+        apply({ num: n, den: d })
+      ),
       this.lengthRow(start, parsed.num, parsed.den, (n, d) =>
         apply({ num: n, den: d })
       ),
@@ -671,20 +685,8 @@ export class PropertyPanel {
     const applyChord = (c: ParsedChord) => {
       this.applyRange(start, end, writeChord(c));
     };
-    // Chord-level length
-    this.host.append(
-      el("div", { class: "abc-gui-section-title" }, [this.strings.panel.section.chordLength]),
-      this.unitLengthInfoRow(start, parsed.num, parsed.den),
-      this.lengthRow(start, parsed.num, parsed.den, (n, d) => {
-        applyChord({ ...parsed, num: n, den: d });
-      }),
-      this.dotRow(start, parsed.num, parsed.den, (n, d) => {
-        applyChord({ ...parsed, num: n, den: d });
-      })
-    );
-    // Per-note tab view. The active tab index is persisted on the panel
-    // so that editing a note's attribute (which re-renders the whole
-    // panel) doesn't bounce the user back to the first tab.
+    // Per-note tab view comes first so the note's accidental/pitch/octave
+    // appear at the top — mirroring the single-note editor's layout.
     this.host.append(
       el("div", { class: "abc-gui-section-title" }, [this.strings.panel.section.notesInChord])
     );
@@ -770,6 +772,21 @@ export class PropertyPanel {
 
     renderTab(initialTab);
     this.host.append(tabBar, pane);
+    // Chord-level duration — appears after the per-note pane to match the
+    // unified property order (acc/pitch/oct → unit/length/dot → …).
+    this.host.append(
+      this.separator(),
+      el("div", { class: "abc-gui-section-title" }, [this.strings.panel.section.chordLength]),
+      this.unitLengthInfoRow(start, parsed.num, parsed.den, (n, d) => {
+        applyChord({ ...parsed, num: n, den: d });
+      }),
+      this.lengthRow(start, parsed.num, parsed.den, (n, d) => {
+        applyChord({ ...parsed, num: n, den: d });
+      }),
+      this.dotRow(start, parsed.num, parsed.den, (n, d) => {
+        applyChord({ ...parsed, num: n, den: d });
+      })
+    );
   }
 
   private renderRestEditor(raw: string, start: number, end: number) {
@@ -797,8 +814,13 @@ export class PropertyPanel {
       );
     }
     this.host.append(
+      el("div", { class: "abc-gui-section-title" }, [this.strings.panel.section.rest]),
       variantRow,
-      this.unitLengthInfoRow(start, parsed.num, parsed.den),
+      this.separator(),
+      el("div", { class: "abc-gui-section-title" }, [this.strings.panel.section.restLength]),
+      this.unitLengthInfoRow(start, parsed.num, parsed.den, (n, d) =>
+        apply({ num: n, den: d })
+      ),
       this.lengthRow(start, parsed.num, parsed.den, (n, d) =>
         apply({ num: n, den: d })
       ),
@@ -1064,7 +1086,8 @@ export class PropertyPanel {
   private unitLengthInfoRow(
     offsetInDoc: number,
     num: number,
-    den: number
+    den: number,
+    onChange: (n: number, d: number) => void
   ): HTMLElement {
     const L = this.doc.unitLengthAt(offsetInDoc);
     // Absolute duration = (num / den) × (L.num / L.den) = (num·L.num) / (den·L.den)
@@ -1072,6 +1095,25 @@ export class PropertyPanel {
     const ad = den * L.den;
     const g = gcd(an, ad);
     const absolute = `${an / g}/${ad / g}`;
+    const numInput = el("input", {
+      class: "abc-gui-input abc-gui-input-small",
+      value: String(num),
+      type: "number",
+      min: "1"
+    }) as HTMLInputElement;
+    const denInput = el("input", {
+      class: "abc-gui-input abc-gui-input-small",
+      value: String(den),
+      type: "number",
+      min: "1"
+    }) as HTMLInputElement;
+    const syncFree = () => {
+      const n = Math.max(1, parseInt(numInput.value, 10) || 1);
+      const d = Math.max(1, parseInt(denInput.value, 10) || 1);
+      onChange(n, d);
+    };
+    numInput.addEventListener("change", syncFree);
+    denInput.addEventListener("change", syncFree);
     return el("div", { class: "abc-gui-row abc-gui-unitlen" }, [
       el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.unitL]),
       el(
@@ -1082,10 +1124,11 @@ export class PropertyPanel {
         },
         [`${L.num}/${L.den}`]
       ),
-      el("span", { class: "abc-gui-muted" }, [
-        this.strings.panel.hints.noteDuration,
-        absolute
-      ])
+      el("span", { class: "abc-gui-muted" }, ["×"]),
+      numInput,
+      el("span", {}, ["/"]),
+      denInput,
+      el("span", { class: "abc-gui-muted", title: absolute }, ["= " + absolute])
     ]);
   }
 
@@ -1130,27 +1173,6 @@ export class PropertyPanel {
         })
       );
     }
-    // Free-form (still relative to L:, matching the stored source form).
-    const numInput = el("input", {
-      class: "abc-gui-input abc-gui-input-small",
-      value: String(num),
-      type: "number",
-      min: "1"
-    }) as HTMLInputElement;
-    const denInput = el("input", {
-      class: "abc-gui-input abc-gui-input-small",
-      value: String(den),
-      type: "number",
-      min: "1"
-    }) as HTMLInputElement;
-    const syncFree = () => {
-      const n = Math.max(1, parseInt(numInput.value, 10) || 1);
-      const d = Math.max(1, parseInt(denInput.value, 10) || 1);
-      onChange(n, d);
-    };
-    numInput.addEventListener("change", syncFree);
-    denInput.addEventListener("change", syncFree);
-    row.append(numInput, el("span", {}, ["/"]), denInput);
     return row;
   }
 
@@ -1232,11 +1254,15 @@ export class PropertyPanel {
     );
 
     // Annotations / chord symbols --------------------------------------
-    const annoRow = el("div", { class: "abc-gui-row" }, [
-      el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.chordText])
-    ]);
+    // One row per annotation, plus a trailing row with the add-button.
+    // Keeping each annotation on its own row makes the narrow panel width
+    // (label + ~7 small controls) fit without wrapping mid-annotation.
     prefix.annotations.forEach((a, idx) => {
-      const placeSel = el("select", { class: "abc-gui-input" }) as HTMLSelectElement;
+      const labelText = idx === 0 ? this.strings.panel.labels.chordText : "";
+      const row = el("div", { class: "abc-gui-row" }, [
+        el("span", { class: "abc-gui-label" }, [labelText])
+      ]);
+      const placeSel = el("select", { class: "abc-gui-input abc-gui-input-small" }) as HTMLSelectElement;
       const ann = this.strings.panel.annotation;
       for (const [v, label, title] of [
         ["", "♩", ann.chordSymbol],
@@ -1251,7 +1277,7 @@ export class PropertyPanel {
         placeSel.append(o);
       }
       const textInput = el("input", {
-        class: "abc-gui-input",
+        class: "abc-gui-input abc-gui-input-flex",
         value: a.text
       }) as HTMLInputElement;
       if (this.pendingAnnotationFocusIndex === idx) {
@@ -1294,9 +1320,9 @@ export class PropertyPanel {
         next.annotations.splice(idx, 1);
         onChange(next);
       });
-      annoRow.append(placeSel, textInput);
+      row.append(placeSel, textInput);
       if (this.chordEditor && a.placement === "") {
-        annoRow.append(
+        row.append(
           button("…", this.strings.panel.hints.pickChordSymbol, () => {
             const cb = this.chordEditor;
             if (!cb) return;
@@ -1314,9 +1340,17 @@ export class PropertyPanel {
           })
         );
       }
-      annoRow.append(removeBtn);
+      row.append(removeBtn);
+      wrap.append(row);
     });
-    annoRow.append(
+    // Trailer row: label shown only when there are no annotations, plus
+    // the add-annotation button.
+    const addRow = el("div", { class: "abc-gui-row" }, [
+      el("span", { class: "abc-gui-label" }, [
+        prefix.annotations.length === 0 ? this.strings.panel.labels.chordText : ""
+      ])
+    ]);
+    addRow.append(
       button('＋"…"', this.strings.panel.hints.addAnnotation, () => {
         const next = cloneAnnotations(prefix);
         this.pendingAnnotationFocusIndex = next.annotations.length;
@@ -1324,44 +1358,83 @@ export class PropertyPanel {
         onChange(next);
       })
     );
-    wrap.append(annoRow);
+    wrap.append(addRow);
 
     // Decorations ------------------------------------------------------
-    // Render every supported decoration in canonical order, highlighting
-    // the ones already attached. Click on a highlighted button removes
-    // that decoration; click on an inactive one adds it. The active
-    // styling already conveys "click to remove" — no extra ✕ glyph.
+    // Show the six most commonly used decorations on the primary row. A
+    // trailing "…" button reveals the rest in additional rows below.
+    // Click on a highlighted button removes that decoration; click on an
+    // inactive one adds it. The active styling conveys "click to remove"
+    // — no extra ✕ glyph.
+    const renderDeco = (d: typeof DECORATIONS[number]): HTMLElement => {
+      const isActive = prefix.decorations.includes(d.name);
+      const locTitle = (this.strings.decorations as Record<string, string>)[d.name] ?? d.title;
+      return button(
+        d.symbol,
+        isActive ? this.strings.panel.hints.removeX(locTitle) : locTitle,
+        () => {
+          const next = cloneDecorations(prefix);
+          if (isActive) {
+            const idx = next.decorations.indexOf(d.name);
+            if (idx >= 0) next.decorations.splice(idx, 1);
+          } else {
+            next.decorations.push(d.name);
+          }
+          onChange(next);
+        },
+        { active: isActive }
+      );
+    };
+    const common = DECORATIONS.filter((d) => DECO_COMMON.includes(d.name))
+      .sort((a, b) => DECO_COMMON.indexOf(a.name) - DECO_COMMON.indexOf(b.name));
+    const rare = DECORATIONS.filter((d) => !DECO_COMMON.includes(d.name));
     const decoRow = el("div", { class: "abc-gui-row abc-gui-deco-row" }, [
       el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.decorations])
     ]);
-    for (const d of DECORATIONS) {
-      const isActive = prefix.decorations.includes(d.name);
-      const locTitle = (this.strings.decorations as Record<string, string>)[d.name] ?? d.title;
+    for (const d of common) decoRow.append(renderDeco(d));
+    // Promote any active rare decoration to the primary row so users can
+    // always see/remove what's attached without expanding.
+    const activeRare = rare.filter((d) => prefix.decorations.includes(d.name));
+    for (const d of activeRare) decoRow.append(renderDeco(d));
+    const hiddenRare = rare.filter((d) => !prefix.decorations.includes(d.name));
+    if (hiddenRare.length > 0) {
       decoRow.append(
         button(
-          d.symbol,
-          isActive
-            ? this.strings.panel.hints.removeX(locTitle)
-            : locTitle,
+          "…",
+          this.decoExpanded
+            ? this.strings.panel.hints.collapseDecorations
+            : this.strings.panel.hints.expandDecorations,
           () => {
-            const next = cloneDecorations(prefix);
-            if (isActive) {
-              const idx = next.decorations.indexOf(d.name);
-              if (idx >= 0) next.decorations.splice(idx, 1);
-            } else {
-              next.decorations.push(d.name);
-            }
-            onChange(next);
+            this.decoExpanded = !this.decoExpanded;
+            this.render();
           },
-          { active: isActive }
+          { active: this.decoExpanded }
         )
       );
     }
+    wrap.append(decoRow);
+    if (this.decoExpanded && hiddenRare.length > 0) {
+      // Show all remaining decorations in as many rows as needed.
+      // We keep 7 buttons per row to match the panel width target.
+      const perRow = 7;
+      for (let i = 0; i < hiddenRare.length; i += perRow) {
+        const extraRow = el("div", { class: "abc-gui-row abc-gui-deco-row abc-gui-deco-extra" }, [
+          el("span", { class: "abc-gui-label" }, [])
+        ]);
+        for (const d of hiddenRare.slice(i, i + perRow)) extraRow.append(renderDeco(d));
+        wrap.append(extraRow);
+      }
+    }
     // Any non-canonical decorations (custom !names!) appear after the
     // standard set so the user can still remove them; click to remove.
+    const customRow = el("div", { class: "abc-gui-row abc-gui-deco-row" }, [
+      el("span", { class: "abc-gui-label" }, [])
+    ]);
+    let hasCustom = false;
     prefix.decorations.forEach((name) => {
       if (DECORATIONS.some((d) => d.name === name)) return;
-      decoRow.append(
+      hasCustom = true;
+      customRow.append(
         button(
           name,
           this.strings.panel.hints.removeX(name),
@@ -1375,14 +1448,14 @@ export class PropertyPanel {
         )
       );
     });
-    wrap.append(decoRow);
+    if (hasCustom) wrap.append(customRow);
 
     // Grace notes ------------------------------------------------------
     const graceRow = el("div", { class: "abc-gui-row" }, [
       el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.grace])
     ]);
     const graceInput = el("input", {
-      class: "abc-gui-input",
+      class: "abc-gui-input abc-gui-input-flex",
       value: prefix.grace ?? "",
       placeholder: this.strings.panel.grace.placeholder
     }) as HTMLInputElement;
@@ -1576,23 +1649,29 @@ export class PropertyPanel {
   // ---- Raw fallback ------------------------------------------------------
 
   private buildRawEditor(raw: string, start: number, end: number): HTMLElement {
-    const wrap = el("div", { class: "abc-gui-raw" });
-    wrap.append(
-      el("div", { class: "abc-gui-section-title" }, [this.strings.panel.section.rawElement])
+    const row = el("div", { class: "abc-gui-row abc-gui-raw" });
+    row.append(
+      el("span", { class: "abc-gui-label" }, [this.strings.panel.section.rawElement])
     );
-    const ta = el("textarea", { class: "abc-gui-raw-input" }) as HTMLTextAreaElement;
-    ta.value = raw;
+    const input = el("input", {
+      class: "abc-gui-input abc-gui-input-flex abc-gui-raw-input",
+      type: "text",
+      value: raw
+    }) as HTMLInputElement;
     const commit = () => {
-      if (ta.value !== raw) {
-        this.applyRange(start, end, ta.value);
+      if (input.value !== raw) {
+        this.applyRange(start, end, input.value);
       }
     };
-    ta.addEventListener("blur", commit);
-    ta.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) commit();
+    input.addEventListener("blur", commit);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        commit();
+      }
     });
-    wrap.append(ta);
-    return wrap;
+    row.append(input);
+    return row;
   }
 
   // ---- Utility -----------------------------------------------------------
@@ -1732,6 +1811,20 @@ const LENGTH_SHORTCUT_FRACTIONS: { num: number; den: number }[] = [
   { num: 1, den: 4 },
   { num: 1, den: 8 },
   { num: 1, den: 16 }
+];
+
+/**
+ * Decoration names considered "commonly used" — displayed on the primary
+ * decorations row. All other decorations are hidden behind a "…" expander.
+ * Order reflects rough usage frequency in folk / classical ABC sources.
+ */
+const DECO_COMMON: string[] = [
+  "staccato",
+  "accent",
+  "tenuto",
+  "fermata",
+  "trill",
+  "marcato"
 ];
 
 function transposeParsedNote(note: ParsedNote, semitoneDelta: number): ParsedNote {

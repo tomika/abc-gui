@@ -26,8 +26,12 @@ export interface Strings {
       other: string;
     };
     section: {
+      note: string;
+      noteLength: string;
       chordLength: string;
       notesInChord: string;
+      rest: string;
+      restLength: string;
       attached: string;
       rawElement: string;
     };
@@ -62,6 +66,8 @@ export interface Strings {
       addAnnotation: string;
       pickChordSymbol: string;
       pickChordNotes: string;
+      expandDecorations: string;
+      collapseDecorations: string;
       noAccidental: string;
       editNote: (index: number) => string;
       addNoteToChord: string;
@@ -198,10 +204,14 @@ export const en: Strings = {
       other: "• Element"
     },
     section: {
+      note: "Note",
+      noteLength: "Note length",
       chordLength: "Chord length",
       notesInChord: "Notes in chord",
+      rest: "Rest",
+      restLength: "Rest length",
       attached: "Attached",
-      rawElement: "Raw element text"
+      rawElement: "ABC"
     },
     labels: {
       accidental: "Accidental",
@@ -247,6 +257,8 @@ export const en: Strings = {
       addAnnotation: "add chord symbol or annotation (shortcut: +)",
       pickChordSymbol: "Pick chord symbol…",
       pickChordNotes: "Pick chord notes…",
+      expandDecorations: "Show more decorations…",
+      collapseDecorations: "Hide additional decorations",
       noAccidental: "no accidental",
       editNote: (i) => `Edit note ${i}`,
       addNoteToChord: "Add note to chord",
@@ -404,10 +416,14 @@ export const hu: Strings = {
       other: "• Elem"
     },
     section: {
+      note: "Hang",
+      noteLength: "Hang hossza",
       chordLength: "Akkord hossza",
       notesInChord: "Akkord hangjai",
+      rest: "Szünet",
+      restLength: "Szünet hossza",
       attached: "Csatolt",
-      rawElement: "Nyers elemszöveg"
+      rawElement: "ABC"
     },
     labels: {
       accidental: "Módosítójel",
@@ -455,6 +471,8 @@ export const hu: Strings = {
         "akkordszimbólum vagy felirat hozzáadása (gyorsbillentyű: +)",
       pickChordSymbol: "Akkordszimbólum választása…",
       pickChordNotes: "Akkordhangok választása…",
+      expandDecorations: "További díszítések mutatása…",
+      collapseDecorations: "További díszítések elrejtése",
       noAccidental: "nincs módosítójel",
       editNote: (i) => `${i}. hang szerkesztése`,
       addNoteToChord: "Hang hozzáadása az akkordhoz",

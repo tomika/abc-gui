@@ -215,8 +215,31 @@ export class Toolbar {
     const start = Math.min(sel.startChar, sel.endChar);
     const end = Math.max(sel.startChar, sel.endChar);
     if (start === end) return;
+
+    const findNeighborAfterDelete = (): { startChar: number; endChar: number } | null => {
+      const ranges: Array<{ startChar: number; endChar: number }> = [];
+      const seen = new Set<string>();
+      this.deps.doc.forEachElement((el) => {
+        const key = `${el.startChar}:${el.endChar}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        ranges.push({ startChar: el.startChar, endChar: el.endChar });
+      });
+      if (ranges.length === 0) return null;
+      ranges.sort((a, b) =>
+        a.startChar === b.startChar
+          ? a.endChar - b.endChar
+          : a.startChar - b.startChar
+      );
+      return (
+        ranges.find((r) => r.startChar >= start) ??
+        ranges[ranges.length - 1] ??
+        null
+      );
+    };
+
     this.deps.doc.replace(start, end, "");
-    this.deps.setSelection({ startChar: start, endChar: start });
+    this.deps.setSelection(findNeighborAfterDelete());
   }
 
   private updatePlaybackButtons(): void {
