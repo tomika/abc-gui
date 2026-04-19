@@ -1388,21 +1388,26 @@ export class PropertyPanel {
       const displayText = (this.germanAlphabet && isChordSymbol)
         ? this.postprocessGermanChordText(a.text)
         : a.text;
-      // Chord symbols (placement="") that are non-empty but not MIDI-playable
-      // by abcjs get a visual warning.
-      const isInvalidChord =
-        isChordSymbol &&
-        a.text.length > 0 &&
-        !(
-          this.chordVerifier
-            ? this.chordVerifier(displayText, this.germanAlphabet)
-            : isAbcjsMidiChord(a.text)
-        );
       const textInput = el("input", {
-        class: "abc-gui-input abc-gui-input-flex" +
-          (isInvalidChord ? " abc-gui-input-invalid" : ""),
+        class: "abc-gui-input abc-gui-input-flex",
         value: displayText
       }) as HTMLInputElement;
+      const updateChordValidity = () => {
+        const chordSymbolMode = placeSel.value === "";
+        if (!chordSymbolMode || textInput.value.length === 0) {
+          textInput.classList.remove("abc-gui-input-invalid");
+          return;
+        }
+        const invalid = this.chordVerifier
+          ? !this.chordVerifier(textInput.value, this.germanAlphabet)
+          : !isAbcjsMidiChord(
+            this.germanAlphabet
+              ? this.preprocessGermanChordText(textInput.value)
+              : textInput.value
+          );
+        textInput.classList.toggle("abc-gui-input-invalid", invalid);
+      };
+      updateChordValidity();
       if (this.pendingAnnotationFocusIndex === idx) {
         // Defer focus until the row has been attached to the document.
         queueMicrotask(() => {
@@ -1424,7 +1429,11 @@ export class PropertyPanel {
         };
         onChange(next);
       };
-      placeSel.addEventListener("change", fire);
+      placeSel.addEventListener("change", () => {
+        updateChordValidity();
+        fire();
+      });
+      textInput.addEventListener("input", updateChordValidity);
       textInput.addEventListener("change", fire);
       textInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
@@ -1438,6 +1447,7 @@ export class PropertyPanel {
           // Revert uncommitted text edits before leaving the field.
           textInput.value = displayText;
           placeSel.value = a.placement;
+          updateChordValidity();
           this.focusEditorFromPanel();
         }
       });
