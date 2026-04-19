@@ -176,6 +176,12 @@ export interface Strings {
     sixteenth: string;
     thirtysecond: string;
   };
+  /**
+   * Short HTML tutorial describing how to use the editor — suitable for
+   * display in a splash screen or help panel. Returned by
+   * `AbcEditor.getTutorialHtml()` in the currently active locale.
+   */
+  tutorial: string;
 }
 
 export const en: Strings = {
@@ -358,7 +364,30 @@ export const en: Strings = {
     eighth: "eighth",
     sixteenth: "sixteenth",
     thirtysecond: "thirty-second"
-  }
+  },
+  tutorial: [
+    "<h3>Selecting elements</h3>",
+    "<ul>",
+    "<li>Click any note, rest, chord, bar line or header field in the score to select it.</li>",
+    "<li>The property panel on the right shows editors for the selected element.</li>",
+    "<li>Use <kbd>←</kbd> / <kbd>→</kbd> to move between elements; <kbd>Esc</kbd> returns focus to the editor.</li>",
+    "</ul>",
+    "<h3>Editing</h3>",
+    "<ul>",
+    "<li>Change pitch, accidental, octave, length, or decorations from the panel.</li>",
+    "<li>Type <kbd>1</kbd>–<kbd>9</kbd> to set length, <kbd>.</kbd> to toggle a dot.</li>",
+    "<li><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> to undo / redo.</li>",
+    "</ul>",
+    "<h3>Inserting</h3>",
+    "<ul>",
+    "<li>Use the toolbar to insert notes, rests, chords, bar lines, header fields, or line breaks.</li>",
+    "<li>Shortcuts: <kbd>N</kbd> note, <kbd>Z</kbd> rest, <kbd>H</kbd> chord, <kbd>I</kbd> bar line, <kbd>Enter</kbd> line break.</li>",
+    "</ul>",
+    "<h3>Raw text pane</h3>",
+    "<p>The raw ABC pane can be toggled from the toolbar. Selecting in the raw text highlights the corresponding element in the score.</p>",
+    "<h3>Playback</h3>",
+    "<p>Press the play button to hear the tune from the selected note (or from the start).</p>"
+  ].join("")
 };
 
 export const hu: Strings = {
@@ -543,7 +572,30 @@ export const hu: Strings = {
     eighth: "nyolcad",
     sixteenth: "tizenhatod",
     thirtysecond: "harminckettes"
-  }
+  },
+  tutorial: [
+    "<h3>Kiválasztás</h3>",
+    "<ul>",
+    "<li>Kattints bármely hangra, szünetre, akkordra, ütemvonalra vagy fejlécmezőre.</li>",
+    "<li>A jobb oldali tulajdonságpanel megjeleníti a kiválasztott elem szerkesztőit.</li>",
+    "<li>A <kbd>←</kbd> / <kbd>→</kbd> bill. mozgat az elemek között; az <kbd>Esc</kbd> visszaadja a fókuszt a szerkesztőnek.</li>",
+    "</ul>",
+    "<h3>Szerkesztés</h3>",
+    "<ul>",
+    "<li>A panelben módosíthatod a hangmagasságot, módosítójelet, oktávot, hosszt és díszítéseket.</li>",
+    "<li>Az <kbd>1</kbd>–<kbd>9</kbd> állítja a hosszt, a <kbd>.</kbd> kapcsolja a pontozást.</li>",
+    "<li><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> visszavonás / újra.</li>",
+    "</ul>",
+    "<h3>Beszúrás</h3>",
+    "<ul>",
+    "<li>Az eszköztár gombjaival szúrhatsz be hangot, szünetet, akkordot, ütemvonalat, fejlécmezőt vagy sortörést.</li>",
+    "<li>Gyorsbillentyűk: <kbd>N</kbd> hang, <kbd>Z</kbd> szünet, <kbd>H</kbd> akkord, <kbd>I</kbd> ütemvonal, <kbd>Enter</kbd> sortörés.</li>",
+    "</ul>",
+    "<h3>Nyers szöveg panel</h3>",
+    "<p>A nyers ABC panel az eszköztárból kapcsolható. A nyers szövegben való kiválasztás kiemeli a megfelelő elemet a kottán.</p>",
+    "<h3>Lejátszás</h3>",
+    "<p>Nyomd meg a lejátszás gombot, hogy meghallgasd a dallamot a kiválasztott hangtól (vagy az elejétől) kezdve.</p>"
+  ].join("")
 };
 
 export type LocaleId = "en" | "hu";

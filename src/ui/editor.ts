@@ -306,6 +306,15 @@ export class AbcEditor {
     this.applyTheme(theme);
   }
 
+  /**
+   * Return a short HTML usage tutorial in the currently active locale.
+   * The returned markup is self-contained and suitable for dropping into
+   * a splash-screen or help dialog (no external styles required).
+   */
+  getTutorialHtml(): string {
+    return this.strings.tutorial;
+  }
+
   private applyTheme(theme: "light" | "dark"): void {
     this.container.classList.toggle("abc-gui-dark", theme === "dark");
   }

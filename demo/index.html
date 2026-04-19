@@ -71,6 +71,49 @@
     h1 { font-size: 1.2em; }
     #host { height: 80vh; }
   }
+  /* Splash screen ---------------------------------------------- */
+  .demo-splash {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .demo-splash[hidden] { display: none; }
+  .demo-splash-card {
+    background: var(--demo-bg, #fff);
+    color: var(--demo-fg, #222);
+    max-width: 560px;
+    width: calc(100% - 32px);
+    max-height: 80vh;
+    overflow: auto;
+    border-radius: 8px;
+    padding: 16px 20px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  }
+  body.demo-dark .demo-splash-card {
+    background: #23262b;
+    color: #e4e6ea;
+  }
+  .demo-splash-card h2 { margin-top: 0; }
+  .demo-splash-card kbd {
+    background: #eee;
+    border: 1px solid #bbb;
+    border-radius: 3px;
+    padding: 0 4px;
+    font-family: inherit;
+    font-size: 0.9em;
+  }
+  body.demo-dark .demo-splash-card kbd {
+    background: #3a3d42;
+    border-color: #555;
+  }
+  .demo-splash-actions {
+    margin-top: 12px;
+    text-align: right;
+  }
 </style>
 </head>
 <body>
@@ -83,9 +126,21 @@
   <button id="lang-hu" title="Magyar">🇭🇺 Magyar</button>
   <span style="margin-left:12px;">Theme:</span>
   <button id="theme-toggle" title="Toggle dark mode">🌙 Dark</button>
+  <button id="help-btn" title="Show tutorial" style="margin-left:12px;">❓ Help</button>
 </div>
 
 <div id="host"></div>
+
+<div id="splash" class="demo-splash" hidden>
+  <div class="demo-splash-card" role="dialog" aria-modal="true" aria-labelledby="splash-title">
+    <h2>abc-gui — quick tutorial</h2>
+    <p>This is a WYSIWYG editor for <a href="https://abcnotation.com/wiki/abc:standard:v2.1" target="_blank" rel="noopener">ABC music notation</a>. Edit the score visually or via its raw text.</p>
+    <div id="splash-content"></div>
+    <div class="demo-splash-actions">
+      <button id="splash-close">Got it</button>
+    </div>
+  </div>
+</div>
 
 <h3>onChange callback output</h3>
 <pre id="log"></pre>
@@ -100,16 +155,15 @@
     "L:1/8",
     "Q:1/4=120",
     "K:G",
-    `"G"GABc d2ef|"D"g2fe d2cB|"Em"A2GF E2D2|"G"[GBd]4 z2 z2|
-    "G"GABc d2ef|"D"g2fe d2cB|"Em"A2GF E2D2|"G"[GBd]4 z2 z2|
-    "G"GABc d2ef|"D"g2fe d2cB|"Em"A2GF E2D2|"G"[GBd]4 z2 z2|
-    "G"GABc d2ef|"D"g2fe d2cB|"Em"A2GF E2D2|"G"[GBd]4 z2 z2|`
+    '"G"GABc d2ef|"D"g2fe d2cB|"Em"A2GF E2D2|"G"[GBd]4 z2 z2|'
   ].join("\n");
+
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 
   const editor = AbcGui.mount(document.getElementById("host"), {
     value: initial,
     locale: "en",
-    theme: "light",
+    theme: prefersDark ? "dark" : "light",
     hideRawView: true,
     onChange: (abc) => {
       document.getElementById("log").textContent = abc;
@@ -141,13 +195,37 @@
 
   // Theme toggle ----------------------------------------------------
   const themeBtn = document.getElementById("theme-toggle");
-  let dark = false;
+  let dark = prefersDark;
+  editor.setTheme(dark ? "dark" : "light");
+  document.body.classList.toggle("demo-dark", dark);
+  themeBtn.textContent = dark ? "☀️ Light" : "🌙 Dark";
   themeBtn.addEventListener("click", () => {
     dark = !dark;
     editor.setTheme(dark ? "dark" : "light");
     document.body.classList.toggle("demo-dark", dark);
     themeBtn.textContent = dark ? "☀️ Light" : "🌙 Dark";
   });
+
+  // Splash screen / tutorial ---------------------------------------
+  const splash = document.getElementById("splash");
+  const splashContent = document.getElementById("splash-content");
+  const splashClose = document.getElementById("splash-close");
+  const helpBtn = document.getElementById("help-btn");
+  function showSplash() {
+    splashContent.innerHTML = editor.getTutorialHtml();
+    splash.hidden = false;
+  }
+  function hideSplash() { splash.hidden = true; }
+  splashClose.addEventListener("click", hideSplash);
+  splash.addEventListener("click", (e) => {
+    if (e.target === splash) hideSplash();
+  });
+  helpBtn.addEventListener("click", showSplash);
+  // Show the tutorial splash on first visit only.
+  if (!localStorage.getItem("abc-gui-demo-splash-seen")) {
+    showSplash();
+    localStorage.setItem("abc-gui-demo-splash-seen", "1");
+  }
 </script>
 </body>
 </html>

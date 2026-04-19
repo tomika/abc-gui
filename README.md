@@ -22,6 +22,12 @@ import "abc-gui/style.css";
 
 const editor = mount(document.getElementById("host")!, {
   value: "X:1\nT:Example\nM:4/4\nL:1/8\nK:G\n|GABc d2ef|",
+  locale: "en",
+  theme: "light",
+  chordEditor: async (seed) => ({
+    chordName: "Cm7",
+    chordMidiValues: [60, 63, 67, 70]
+  }),
   onChange: (abc) => console.log("new abc:", abc)
 });
 
@@ -45,6 +51,7 @@ In the browser via the UMD bundle:
 **[Live demo](https://tomika.github.io/abc-gui/demo/)** — auto-deployed from `master` via GitHub Pages.
 
 Open [`demo/index.html`](./demo/index.html) locally after `npm run build` for an offline runnable demo.
+The demo initializes theme from your system color-scheme preference (`prefers-color-scheme`), and shows a first-run splash screen built from `editor.getTutorialHtml()` (click the **Help** button to reopen).
 
 ## API
 
@@ -53,11 +60,33 @@ mount(container: HTMLElement, options?: {
   value?: string;
   onChange?: (abc: string) => void;
   hideRawView?: boolean;
+  locale?: "en" | "hu" | Strings;
+  theme?: "light" | "dark";
+  /**
+   * Injection point for an external chord-selector UI. When provided,
+   * small "…" buttons appear next to chord-symbol annotations and inside
+   * the chord-note tab bar. Clicking one invokes this callback with the
+   * current chord (ABC text) as a seed. The host application is
+   * responsible for showing whatever chord-picker UI it likes and
+   * resolving the promise with the chosen chord name and the MIDI values
+   * of its notes.
+   */
+  chordEditor?: (chord: string) => Promise<{
+    chordName: string;
+    chordMidiValues: number[];
+  }>;
 }): AbcEditor;
 
 interface AbcEditor {
   getValue(): string;
   setValue(abc: string, options?: { silent?: boolean }): void;
+  setLocale(locale: "en" | "hu" | Strings): void;
+  setTheme(theme: "light" | "dark"): void;
+  /**
+   * Return a short HTML usage tutorial in the currently active locale.
+   * Suitable for dropping into a splash-screen or help dialog.
+   */
+  getTutorialHtml(): string;
   destroy(): void;
 }
 ```
