@@ -5,7 +5,7 @@
  * to the editor and let our model resolve the element.
  */
 
-import abcjs from "abcjs";
+import abcjs, { AbcVisualParams } from "abcjs";
 import type { AbcDocument } from "../model/document.js";
 
 export interface SelectionEvent {
@@ -35,13 +35,24 @@ export class ScoreView {
   private selected: { startChar: number; endChar: number } | null = null;
   private selectedClasses: string | null = null;
   private lastTune: unknown = null;
+  /** Caller-supplied extra params forwarded to `abcjs.renderAbc`. Merged on
+   *  top of the defaults, so consumers can override `responsive`,
+   *  `selectionColor`, etc. if desired. */
+  private extraParams: AbcVisualParams = {};
 
-  constructor(host: HTMLElement, doc: AbcDocument) {
+  constructor(host: HTMLElement, doc: AbcDocument, extraParams: AbcVisualParams = {}) {
     this.host = host;
     this.doc = doc;
+    this.extraParams = { ...extraParams };
     this.host.classList.add("abc-gui-score");
     this.doc.on(() => this.scheduleRender());
     this.render();
+  }
+
+  /** Replace the extra abcjs render params and trigger a re-render. */
+  setAbcjsOptions(params: AbcVisualParams): void {
+    this.extraParams = { ...params };
+    this.scheduleRender();
   }
 
   onSelect(cb: (ev: SelectionEvent) => void): void {
@@ -112,6 +123,10 @@ export class ScoreView {
       // attributes on child paths) while notes still look blue because
       // our CSS class lands on the whole group.
       selectionColor: "#1659c7",
+      // Caller-provided overrides (germanAlphabet, jazzchords, staffwidth,
+      // scale, visualTranspose, paddingtop/bottom, format, etc.) go before
+      // `clickListener` so consumers cannot accidentally replace it.
+      ...this.extraParams,
       clickListener: (
         abcelem: {
           startChar?: number;

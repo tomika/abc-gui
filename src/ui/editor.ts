@@ -10,6 +10,7 @@ import { Toolbar } from "./toolbar.js";
 import { RawView } from "./raw-view.js";
 import { el } from "./dom.js";
 import { LocaleId, Strings, resolveStrings } from "../i18n.js";
+import { AbcVisualParams } from "abcjs";
 
 export interface AbcEditorOptions {
   value?: string;
@@ -22,6 +23,22 @@ export interface AbcEditorOptions {
   theme?: "light" | "dark";
   /** Chord editor callback */
   chordEditor?: (chord: string) => Promise<{ chordName: string; chordMidiValues: number[] }>;
+  /**
+   * Extra parameters forwarded verbatim to `abcjs.renderAbc`. Use this to
+   * tweak engraving-level behavior that abcjs exposes but we don't wrap
+   * with a first-class option. Common keys:
+   *   - `germanAlphabet: boolean` — render note names in German notation.
+   *   - `jazzchords: boolean` — draw chord symbols in jazz style.
+   *   - `visualTranspose: number` — semitone shift for display only.
+   *   - `scale: number` — uniform zoom factor.
+   *   - `staffwidth: number` — target staff width in pixels.
+   *   - `paddingtop` / `paddingbottom` / `paddingleft` / `paddingright`.
+   *   - `format: Record<string, string|number>` — ABC %%format overrides.
+   *   - `print: boolean`, `oneSvgPerLine: boolean`, `wrap: object`, …
+   * See the abcjs docs for the full list. Values here override the
+   * editor's built-in defaults except for selection/click handling.
+   */
+  abcjsOptions?: AbcVisualParams;
 }
 
 export class AbcEditor {
@@ -78,8 +95,9 @@ export class AbcEditor {
     rawHost.hidden = !this.rawVisible;
     this.updateRawLayoutState();
 
-    this.score = new ScoreView(scoreHost, this.doc);
+    this.score = new ScoreView(scoreHost, this.doc, opts.abcjsOptions ?? {});
     this.panel = new PropertyPanel(panelHost, this.doc, this.strings, opts.chordEditor ?? null);
+    this.panel.setGermanAlphabet(!!opts.abcjsOptions?.germanAlphabet);
     this.player = new MidiPlayer();
     // Any re-render invalidates the primed synth buffer so playback always
     // reflects the latest ABC source.
@@ -304,6 +322,16 @@ export class AbcEditor {
   /** Switch visual theme. */
   setTheme(theme: "light" | "dark"): void {
     this.applyTheme(theme);
+  }
+
+  /**
+   * Replace the extra abcjs render parameters (e.g. `germanAlphabet`,
+   * `jazzchords`, `visualTranspose`, `scale`, `staffwidth`, `format`, …).
+   * Triggers a re-render.
+   */
+  setAbcjsOptions(params: AbcVisualParams): void {
+    this.score.setAbcjsOptions(params);
+    this.panel.setGermanAlphabet(!!params.germanAlphabet);
   }
 
   /**

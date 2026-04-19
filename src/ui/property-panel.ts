@@ -81,6 +81,10 @@ export class PropertyPanel {
   private chordActiveTab = 0;
   private chordEditor: ChordEditorCallback | null = null;
   private decoExpanded = false;
+  /** When true, display the letter "B" as "H" (German note-naming
+   *  convention), matching abcjs's `germanAlphabet` render option.
+   *  Only affects UI labels — underlying ABC source stays in A–G. */
+  private germanAlphabet = false;
 
   constructor(
     host: HTMLElement,
@@ -99,6 +103,23 @@ export class PropertyPanel {
   setStrings(strings: Strings): void {
     this.strings = strings;
     this.render();
+  }
+
+  /** Toggle German note-name display (B → H). Re-renders the panel. */
+  setGermanAlphabet(v: boolean): void {
+    const next = !!v;
+    if (this.germanAlphabet === next) return;
+    this.germanAlphabet = next;
+    this.render();
+  }
+
+  /** Map an ABC letter (A–G) to its displayed label under the current
+   *  note-naming convention. */
+  private displayLetter(letter: string): string {
+    if (this.germanAlphabet && letter.toUpperCase() === "B") {
+      return letter === "b" ? "h" : "H";
+    }
+    return letter;
   }
 
   private kindLabel(k: string): string {
@@ -1109,7 +1130,7 @@ export class PropertyPanel {
       el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.pitch])
     ]);
     for (const L of ["C", "D", "E", "F", "G", "A", "B"]) {
-      row.append(button(L, this.strings.panel.hints.pitchOf(L), () => onChange(L), { active: current === L }));
+      row.append(button(this.displayLetter(L), this.strings.panel.hints.pitchOf(L), () => onChange(L), { active: current === L }));
     }
     return row;
   }
@@ -1569,7 +1590,7 @@ export class PropertyPanel {
 
     const tonicSel = el("select", { class: "abc-gui-input" }) as HTMLSelectElement;
     for (const L of ["A", "B", "C", "D", "E", "F", "G"]) {
-      const o = el("option", { value: L }, [L]) as HTMLOptionElement;
+      const o = el("option", { value: L }, [this.displayLetter(L)]) as HTMLOptionElement;
       if (L === tonic) o.selected = true;
       tonicSel.append(o);
     }
