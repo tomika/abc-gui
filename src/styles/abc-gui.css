@@ -384,6 +384,15 @@
 .abc-gui-input-small { width: 40px; flex: 0 0 40px; }
 .abc-gui-input-flex { flex: 1 1 0; min-width: 0; }
 
+.abc-gui-input-invalid {
+  color: #a33;
+  border-color: #d8a8a8;
+}
+.abc-gui-dark .abc-gui-input-invalid {
+  color: #ff8a8a;
+  border-color: #6b3a3a;
+}
+
 .abc-gui-section-title {
   margin: 8px 0 2px;
   font-weight: 600;

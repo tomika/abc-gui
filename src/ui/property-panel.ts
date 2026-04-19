@@ -27,6 +27,7 @@ import {
   writeInfoLine,
   writeInlineField,
   writePrefix,
+  isAbcjsMidiChord,
   ACCIDENTALS,
   ACCIDENTAL_GLYPH,
   Accidental,
@@ -132,6 +133,16 @@ export class PropertyPanel {
    */
   private preprocessGermanChordText(text: string): string {
     return text.replace(/B(?!b)/g, "Bb").replace(/H/g, "B");
+  }
+
+  /**
+   * Convert stored standard ABC chord notation back to German display form.
+   * This is the inverse of `preprocessGermanChordText`:
+   * Step 1: replace every "B" not followed by "b" with "H" (B natural → H).
+   * Step 2: replace every "Bb" with "B" (Bb → German B).
+   */
+  private postprocessGermanChordText(text: string): string {
+    return text.replace(/B(?!b)/g, "H").replace(/Bb/g, "B");
   }
 
   private kindLabel(k: string): string {
@@ -1358,9 +1369,19 @@ export class PropertyPanel {
         if (v === a.placement) o.selected = true;
         placeSel.append(o);
       }
+      // Display value: reverse-convert German notation when in German mode
+      // so what was typed as "B" (Bb) or "H" (B natural) is shown correctly.
+      const displayText = this.germanAlphabet
+        ? this.postprocessGermanChordText(a.text)
+        : a.text;
+      // Chord symbols (placement="") that are non-empty but not MIDI-playable
+      // by abcjs get a visual warning.
+      const isInvalidChord =
+        a.placement === "" && a.text.length > 0 && !isAbcjsMidiChord(a.text);
       const textInput = el("input", {
-        class: "abc-gui-input abc-gui-input-flex",
-        value: a.text
+        class: "abc-gui-input abc-gui-input-flex" +
+          (isInvalidChord ? " abc-gui-input-invalid" : ""),
+        value: displayText
       }) as HTMLInputElement;
       if (this.pendingAnnotationFocusIndex === idx) {
         // Defer focus until the row has been attached to the document.
@@ -1393,7 +1414,7 @@ export class PropertyPanel {
         if (e.key === "Escape") {
           e.preventDefault();
           // Revert uncommitted text edits before leaving the field.
-          textInput.value = a.text;
+          textInput.value = displayText;
           placeSel.value = a.placement;
           this.focusEditorFromPanel();
         }
