@@ -273,6 +273,7 @@
 
   function setLang(id) {
     editor.setLocale(id);
+    editor.setAbcjsOptions({ germanAlphabet: id === "hu" });
     applyDemoLang(id);
     enBtn.classList.toggle("active", id === "en");
     huBtn.classList.toggle("active", id === "hu");

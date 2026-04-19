@@ -27,6 +27,7 @@ const editor = mount(document.getElementById("host")!, {
   value: "X:1\nT:Example\nM:4/4\nL:1/8\nK:G\n|GABc d2ef|",
   locale: "en",
   theme: "light",
+  abcjsOptions: { germanAlphabet: false },
   chordEditor: async (seed) => ({
     chordName: "Cm7",
     chordMidiValues: [60, 63, 67, 70]
@@ -36,10 +37,11 @@ const editor = mount(document.getElementById("host")!, {
 
 editor.setValue(newAbc);   // replace programmatically
 editor.getValue();          // read the current source
+editor.setAbcjsOptions({ germanAlphabet: true });
 editor.destroy();           // tear down
 ```
 
-In the browser via the UMD bundle:
+In the browser via the IIFE bundle:
 
 ```html
 <link rel="stylesheet" href="abc-gui/dist/abc-gui.css" />
@@ -51,10 +53,11 @@ In the browser via the UMD bundle:
 </script>
 ```
 
-**[Live demo](https://tomika.github.io/abc-gui/demo/)** — auto-deployed from `master` via GitHub Pages.
+**[Live demo](https://tomika.github.io/abc-gui/demo/)** — auto-deployed via GitHub Pages.
 
 Open [`demo/index.html`](./demo/index.html) locally after `npm run build` for an offline runnable demo.
 The demo initializes theme from your system color-scheme preference (`prefers-color-scheme`), and shows a first-run splash screen built from `editor.getTutorialHtml()` (click the **Help** button to reopen).
+It also switches abcjs note naming to `germanAlphabet` while Hungarian UI is selected.
 
 ## API
 
@@ -78,6 +81,11 @@ mount(container: HTMLElement, options?: {
     chordName: string;
     chordMidiValues: number[];
   }>;
+  /**
+   * Forwarded to abcjs.renderAbc (e.g. germanAlphabet, jazzchords,
+   * visualTranspose, scale, staffwidth, format, ...).
+   */
+  abcjsOptions?: AbcVisualParams;
 }): AbcEditor;
 
 interface AbcEditor {
@@ -85,6 +93,7 @@ interface AbcEditor {
   setValue(abc: string, options?: { silent?: boolean }): void;
   setLocale(locale: "en" | "hu" | Strings): void;
   setTheme(theme: "light" | "dark"): void;
+  setAbcjsOptions(params: AbcVisualParams): void;
   /**
    * Return a short HTML usage tutorial in the currently active locale.
    * Suitable for dropping into a splash-screen or help dialog.
