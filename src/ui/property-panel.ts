@@ -122,6 +122,18 @@ export class PropertyPanel {
     return letter;
   }
 
+  /**
+   * Convert German chord notation to standard ABC notation.
+   * In German notation "B" means Bb and "H" means B natural.
+   * Step 1: replace every "B" not already followed by "b" with "Bb".
+   * Step 2: replace every "H" with "B".
+   * Applying step 1 before step 2 ensures a freshly-inserted "B" (from H)
+   * is never subsequently expanded to "Bb".
+   */
+  private preprocessGermanChordText(text: string): string {
+    return text.replace(/B(?!b)/g, "Bb").replace(/H/g, "B");
+  }
+
   private kindLabel(k: string): string {
     const s = this.strings.panel.kind;
     switch (k) {
@@ -1360,10 +1372,11 @@ export class PropertyPanel {
       }
       const fire = () => {
         const next = cloneAnnotations(prefix);
+        const rawText = textInput.value;
         next.annotations[idx] = {
           ...a,
           placement: placeSel.value as ParsedAnnotation["placement"],
-          text: textInput.value,
+          text: this.germanAlphabet ? this.preprocessGermanChordText(rawText) : rawText,
           raw: ""
         };
         onChange(next);
