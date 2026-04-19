@@ -23,6 +23,8 @@ export interface AbcEditorOptions {
   theme?: "light" | "dark";
   /** Chord editor callback */
   chordEditor?: (chord: string) => Promise<{ chordName: string; chordMidiValues: number[] }>;
+  /** Optional stricter chord validation callback for chord-symbol annotations. */
+  chordVerifier?: (chordName: string, germanAlphabet: boolean) => boolean;
   /**
    * Extra parameters forwarded verbatim to `abcjs.renderAbc`. Use this to
    * tweak engraving-level behavior that abcjs exposes but we don't wrap
@@ -96,7 +98,13 @@ export class AbcEditor {
     this.updateRawLayoutState();
 
     this.score = new ScoreView(scoreHost, this.doc, opts.abcjsOptions ?? {});
-    this.panel = new PropertyPanel(panelHost, this.doc, this.strings, opts.chordEditor ?? null);
+    this.panel = new PropertyPanel(
+      panelHost,
+      this.doc,
+      this.strings,
+      opts.chordEditor ?? null,
+      opts.chordVerifier ?? null
+    );
     this.panel.setGermanAlphabet(!!opts.abcjsOptions?.germanAlphabet);
     this.player = new MidiPlayer();
     // Any re-render invalidates the primed synth buffer so playback always

@@ -32,6 +32,14 @@ const editor = mount(document.getElementById("host")!, {
     chordName: "Cm7",
     chordMidiValues: [60, 63, 67, 70]
   }),
+  chordVerifier: (chordName, germanAlphabet) => {
+    // Example strict verifier: root + optional accidental + known quality.
+    const normalized = germanAlphabet
+      ? chordName.replace(/^H/, "B").replace(/^B(?!b)/, "Bb")
+      : chordName;
+    return /^\(?[A-G](?:#|b)?(?:m|maj|min|dim|aug|sus|add)?\d*(?:\/[A-G](?:#|b)?)?\)?$/i
+      .test(normalized.trim());
+  },
   onChange: (abc) => console.log("new abc:", abc)
 });
 
@@ -81,6 +89,12 @@ mount(container: HTMLElement, options?: {
     chordName: string;
     chordMidiValues: number[];
   }>;
+  /**
+   * Optional stricter validator for attached chord symbols ("...").
+   * If omitted, abc-gui falls back to abcjs-compatible permissive checking.
+   * `chordName` is the text as shown in the UI.
+   */
+  chordVerifier?: (chordName: string, germanAlphabet: boolean) => boolean;
   /**
    * Forwarded to abcjs.renderAbc (e.g. germanAlphabet, jazzchords,
    * visualTranspose, scale, staffwidth, format, ...).

@@ -178,6 +178,14 @@
         chordMidiValues: [60, 63, 67, 70], // C min 7
       };
     },
+    chordVerifier: (chordName, germanAlphabet) => {
+      // Demo strict verifier; host apps can replace this with richer logic.
+      const normalized = germanAlphabet
+        ? chordName.replace(/^H/, "B").replace(/^B(?!b)/, "Bb")
+        : chordName;
+      return /^\(?[A-G](?:#|b)?(?:m|maj|min|dim|aug|sus|add)?\d*(?:\/[A-G](?:#|b)?)?\)?$/i
+        .test(normalized.trim());
+    },
   });
   document.getElementById("log").textContent = editor.getValue();
 

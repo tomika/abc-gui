@@ -427,6 +427,40 @@ export function readPrefix(src: string, i: number): ElementPrefix {
   return out;
 }
 
+/**
+ * Returns true when `text` will be interpreted as a MIDI-playable chord
+ * symbol by abcjs's ChordTrack.  The rules are derived directly from
+ * abcjs's `interpretChord` implementation:
+ *
+ *  - The "break" synonyms ('break', '(break)', 'no chord', 'n.c.',
+ *    'tacet') are silences — they are valid in the sense that abcjs
+ *    handles them without falling back to "ignore this chord".
+ *  - Otherwise the first character of the name (after an optional
+ *    leading '(') must be one of A–G (uppercase, as stored in abcjs's
+ *    `basses` table).  Any modifier that follows is accepted; unrecognised
+ *    modifiers fall back to a major triad.
+ *  - An empty string is considered invalid.
+ */
+export function isAbcjsMidiChord(text: string): boolean {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  if (
+    lower === "break" ||
+    lower === "(break)" ||
+    lower === "no chord" ||
+    lower === "n.c." ||
+    lower === "tacet"
+  ) return true;
+  let name = text;
+  if (name[0] === "(") {
+    name = name.slice(1, name.length - 1);
+    if (!name) return false;
+  }
+  const root = name[0];
+  if (!root) return false;
+  return "ABCDEFG".includes(root);
+}
+
 /** Serialize an ElementPrefix back to ABC text (preserving original order
  *  as best as possible: annotations, then decorations, then grace notes). */
 export function writePrefix(p: ElementPrefix): string {

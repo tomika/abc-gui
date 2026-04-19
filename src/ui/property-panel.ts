@@ -27,6 +27,7 @@ import {
   writeInfoLine,
   writeInlineField,
   writePrefix,
+  isAbcjsMidiChord,
   ACCIDENTALS,
   ACCIDENTAL_GLYPH,
   Accidental,
@@ -55,6 +56,16 @@ export type ChordEditorCallback = (
   chord: string
 ) => Promise<{ chordName: string; chordMidiValues: number[] }>;
 
+/**
+ * Optional external chord validation callback.
+ * Receives the chord text as shown in the UI and whether German note naming
+ * is active, so hosts can apply stricter, domain-specific validation rules.
+ */
+export type ChordVerifierCallback = (
+  chordName: string,
+  germanAlphabet: boolean
+) => boolean;
+
 interface SelectionContext {
   selStart: number;
   selEnd: number;
@@ -80,6 +91,7 @@ export class PropertyPanel {
   private pendingAnnotationFocusIndex: number | null = null;
   private chordActiveTab = 0;
   private chordEditor: ChordEditorCallback | null = null;
+  private chordVerifier: ChordVerifierCallback | null = null;
   private decoExpanded = false;
   /** When true, display the letter "B" as "H" (German note-naming
    *  convention), matching abcjs's `germanAlphabet` render option.
@@ -90,12 +102,14 @@ export class PropertyPanel {
     host: HTMLElement,
     doc: AbcDocument,
     strings: Strings,
-    chordEditor: ChordEditorCallback | null = null
+    chordEditor: ChordEditorCallback | null = null,
+    chordVerifier: ChordVerifierCallback | null = null
   ) {
     this.host = host;
     this.doc = doc;
     this.strings = strings;
     this.chordEditor = chordEditor;
+    this.chordVerifier = chordVerifier;
     this.host.classList.add("abc-gui-panel");
     this.render();
   }
@@ -120,6 +134,28 @@ export class PropertyPanel {
       return letter === "b" ? "h" : "H";
     }
     return letter;
+  }
+
+  /**
+   * Convert German chord notation to standard ABC notation.
+   * In German notation "B" means Bb and "H" means B natural.
+   * Step 1: replace every "B" not already followed by "b" with "Bb".
+   * Step 2: replace every "H" with "B".
+   * Applying step 1 before step 2 ensures a freshly-inserted "B" (from H)
+   * is never subsequently expanded to "Bb".
+   */
+  private preprocessGermanChordText(text: string): string {
+    return text.replace(/B(?!b)/g, "Bb").replace(/H/g, "B");
+  }
+
+  /**
+   * Convert stored standard ABC chord notation back to German display form.
+   * This is the inverse of `preprocessGermanChordText`:
+   * Step 1: replace every "B" not followed by "b" with "H" (B natural → H).
+   * Step 2: replace every "Bb" with "B" (Bb → German B).
+   */
+  private postprocessGermanChordText(text: string): string {
+    return text.replace(/B(?!b)/g, "H").replace(/Bb/g, "B");
   }
 
   private kindLabel(k: string): string {
@@ -1346,9 +1382,26 @@ export class PropertyPanel {
         if (v === a.placement) o.selected = true;
         placeSel.append(o);
       }
+      const isChordSymbol = a.placement === "";
+      // Display value: reverse-convert German notation only for chord symbols
+      // so non-chord annotations are preserved verbatim.
+      const displayText = (this.germanAlphabet && isChordSymbol)
+        ? this.postprocessGermanChordText(a.text)
+        : a.text;
+      // Chord symbols (placement="") that are non-empty but not MIDI-playable
+      // by abcjs get a visual warning.
+      const isInvalidChord =
+        isChordSymbol &&
+        a.text.length > 0 &&
+        !(
+          this.chordVerifier
+            ? this.chordVerifier(displayText, this.germanAlphabet)
+            : isAbcjsMidiChord(a.text)
+        );
       const textInput = el("input", {
-        class: "abc-gui-input abc-gui-input-flex",
-        value: a.text
+        class: "abc-gui-input abc-gui-input-flex" +
+          (isInvalidChord ? " abc-gui-input-invalid" : ""),
+        value: displayText
       }) as HTMLInputElement;
       if (this.pendingAnnotationFocusIndex === idx) {
         // Defer focus until the row has been attached to the document.
@@ -1360,10 +1413,13 @@ export class PropertyPanel {
       }
       const fire = () => {
         const next = cloneAnnotations(prefix);
+        const rawText = textInput.value;
         next.annotations[idx] = {
           ...a,
           placement: placeSel.value as ParsedAnnotation["placement"],
-          text: textInput.value,
+          text: (this.germanAlphabet && placeSel.value === "")
+            ? this.preprocessGermanChordText(rawText)
+            : rawText,
           raw: ""
         };
         onChange(next);
@@ -1380,7 +1436,7 @@ export class PropertyPanel {
         if (e.key === "Escape") {
           e.preventDefault();
           // Revert uncommitted text edits before leaving the field.
-          textInput.value = a.text;
+          textInput.value = displayText;
           placeSel.value = a.placement;
           this.focusEditorFromPanel();
         }
