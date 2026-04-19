@@ -2,7 +2,15 @@
   "name": "abc-gui",
   "version": "0.1.0",
   "description": "Fully-featured WYSIWYG editor for ABC music notation (framework-free TypeScript).",
-  "keywords": ["abc", "abcjs", "music", "notation", "editor", "wysiwyg", "typescript"],
+  "keywords": [
+    "abc",
+    "abcjs",
+    "music",
+    "notation",
+    "editor",
+    "wysiwyg",
+    "typescript"
+  ],
   "license": "MIT",
   "type": "module",
   "main": "dist/index.cjs",
@@ -17,7 +25,11 @@
     "./browser": "./dist/index.iife.js",
     "./style.css": "./dist/abc-gui.css"
   },
-  "files": ["dist", "src", "README.md"],
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
   "scripts": {
     "prepare": "npm run build",
     "build": "node scripts/build.mjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
@@ -31,9 +43,9 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
-    "esbuild": "^0.23.0",
+    "esbuild": "^0.28.0",
     "typescript": "^5.5.4",
-    "vitest": "^2.1.9"
+    "vitest": "^3.2.4"
   },
   "engines": {
     "node": ">=18"
