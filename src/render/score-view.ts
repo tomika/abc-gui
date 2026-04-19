@@ -72,6 +72,16 @@ export class ScoreView {
     this.host.innerHTML = "";
   }
 
+  /**
+   * Strip abcjs's native transient selection markers (CSS classes ending
+   * in `_selected` and inline fill/stroke) without touching our own
+   * `.abc-gui-selected` highlight. Useful for click targets we choose to
+   * ignore (e.g. slur/tie arcs) so they don't remain visually selected.
+   */
+  clearNativeSelection(): void {
+    this.clearNativeSelectionStyle();
+  }
+
   private scheduleRender(): void {
     if (this.renderTimer) clearTimeout(this.renderTimer);
     this.renderTimer = setTimeout(() => this.render(), 30);
@@ -148,6 +158,12 @@ export class ScoreView {
 
   /** Highlight the SVG group(s) that represent the selected element. */
   private applySelectionStyle(): void {
+    // abcjs adds its own transient "*_selected" classes and inline
+    // fill/stroke on click targets. We own selection rendering via the
+    // `.abc-gui-selected` class, so clear abcjs-native markers first to
+    // avoid double-highlights (notably on slur/tie arcs).
+    this.clearNativeSelectionStyle();
+
     const prev = this.host.querySelectorAll(".abc-gui-selected");
     prev.forEach((n) => n.classList.remove("abc-gui-selected"));
     if (!this.selected) return;
@@ -181,6 +197,25 @@ export class ScoreView {
       `.abcjs-n${this.selected.startChar}`
     );
     nodes.forEach((n) => n.classList.add("abc-gui-selected"));
+  }
+
+  /** Remove abcjs built-in selection classes/styles so only our highlight shows. */
+  private clearNativeSelectionStyle(): void {
+    const maybeSelected = this.host.querySelectorAll<SVGElement>("[class*='_selected']");
+    maybeSelected.forEach((node) => {
+      const toDrop: string[] = [];
+      node.classList.forEach((c) => {
+        if (c.endsWith("_selected")) toDrop.push(c);
+      });
+      for (const c of toDrop) node.classList.remove(c);
+
+      // abcjs may set inline fill/stroke on selection; clear them so base
+      // engraving colors (and our own selection class) are authoritative.
+      if (node.style.fill) node.style.removeProperty("fill");
+      if (node.style.stroke) node.style.removeProperty("stroke");
+      if (node.getAttribute("fill") === "#1659c7") node.removeAttribute("fill");
+      if (node.getAttribute("stroke") === "#1659c7") node.removeAttribute("stroke");
+    });
   }
 
   /**

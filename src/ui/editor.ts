@@ -365,6 +365,17 @@ export class AbcEditor {
       .join(" ")
       .toLowerCase();
 
+    // Slur/tie curves (drawn arcs) are visual binding marks, not editable
+    // standalone elements. Parenthesis/tie state is edited from the bound
+    // note/chord/rest in the property panel, so arc-only clicks should not
+    // change selection. abcjs still paints its own `_selected` marker on
+    // the clicked arc element, so clear it explicitly — otherwise the arc
+    // keeps a leftover red highlight next to our actually-selected note.
+    if (this.isBindingArcClick(semanticName)) {
+      this.score.clearNativeSelection();
+      return;
+    }
+
     // abcjs exposes staff-level symbols (clef, key signature, time
     // signature, tempo) via click-analysis names like `staff-extra clef`.
     // Those symbols are editable through their owning source field, so map
@@ -426,6 +437,10 @@ export class AbcEditor {
     }
 
     this.select({ startChar, endChar }, ev.classes);
+  }
+
+  private isBindingArcClick(semanticName: string): boolean {
+    return /(\babcjs-(slur|tie)\b|\b(slur|tie|arc|phrase)\b)/.test(semanticName);
   }
 
   private resolveClickRange(ev: SelectionEvent): { startChar: number; endChar: number } {

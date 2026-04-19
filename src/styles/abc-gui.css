@@ -546,3 +546,24 @@
   fill: var(--abc-note-selected) !important;
   stroke: var(--abc-note-selected) !important;
 }
+
+/* abcjs marks slur/tie arcs as selectable SVG groups and focuses them on
+ * click, which paints the browser's default focus outline (an orange
+ * box). We handle selection ourselves and deliberately ignore arc clicks,
+ * so suppress that focus ring. */
+.abc-gui-score-host svg [data-name="slur"],
+.abc-gui-score-host svg [data-name="tie"],
+.abc-gui-score-host svg .abcjs-slur,
+.abc-gui-score-host svg .abcjs-tie {
+  outline: none !important;
+}
+.abc-gui-score-host svg [data-name="slur"]:focus,
+.abc-gui-score-host svg [data-name="tie"]:focus,
+.abc-gui-score-host svg .abcjs-slur:focus,
+.abc-gui-score-host svg .abcjs-tie:focus,
+.abc-gui-score-host svg [data-name="slur"]:focus-visible,
+.abc-gui-score-host svg [data-name="tie"]:focus-visible,
+.abc-gui-score-host svg .abcjs-slur:focus-visible,
+.abc-gui-score-host svg .abcjs-tie:focus-visible {
+  outline: none !important;
+}
