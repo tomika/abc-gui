@@ -10,9 +10,12 @@ Fully-featured WYSIWYG editor for [ABC music notation](https://abcnotation.com/w
 
 ## Install
 
+Install directly from GitHub:
+
 ```sh
-npm install abc-gui abcjs
+npm install github:tomika/abc-gui
 ```
+
 
 ## Usage
 
