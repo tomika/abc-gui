@@ -941,19 +941,28 @@ export class PropertyPanel {
     // Strip trailing volta numbers (e.g. |:1,2,3 → |:) for button matching.
     const barLine = current.replace(/[0-9,\-]+$/, "");
 
-    const row = el("div", { class: "abc-gui-row abc-gui-bar-row" });
-    for (const b of BAR_TYPES) {
-      const t = this.strings.barTypes[b.value as keyof typeof this.strings.barTypes] ?? b.title;
-      row.append(
-        button(
-          b.label,
-          t,
-          () => this.applyRange(start, end, b.value),
-          { active: barLine === b.value }
-        )
-      );
+    const wrap = el("div");
+    const perRow = 4;
+    for (let i = 0; i < BAR_TYPES.length; i += perRow) {
+      const row = el("div", { class: "abc-gui-row abc-gui-bar-row" }, [
+        el("span", { class: "abc-gui-label" }, [
+          i === 0 ? this.strings.panel.labels.barType : ""
+        ])
+      ]);
+      for (const b of BAR_TYPES.slice(i, i + perRow)) {
+        const t = this.strings.barTypes[b.value as keyof typeof this.strings.barTypes] ?? b.title;
+        row.append(
+          button(
+            b.label,
+            t,
+            () => this.applyRange(start, end, b.value),
+            { active: barLine === b.value }
+          )
+        );
+      }
+      wrap.append(row);
     }
-    this.host.append(row);
+    this.host.append(wrap);
   }
 
   private renderInfoFieldEditor(
@@ -989,7 +998,7 @@ export class PropertyPanel {
       default: {
         // Plain text editor for T:, C:, X:, V:, etc.
         const input = el("input", {
-          class: "abc-gui-input",
+          class: "abc-gui-input abc-gui-input-flex",
           value: parsed.value
         }) as HTMLInputElement;
         input.addEventListener("input", () => apply({ value: input.value }));
@@ -1644,8 +1653,9 @@ export class PropertyPanel {
       }
     }
 
-    const row = el("div", { class: "abc-gui-row" }, [
-      el("span", { class: "abc-gui-label" }, ["K:"])
+    const wrap = el("div");
+    const keyRow = el("div", { class: "abc-gui-row" }, [
+      el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.key])
     ]);
     const fire = () => {
       const key = tonic + acc + (mode === "maj" ? "" : mode);
@@ -1707,27 +1717,101 @@ export class PropertyPanel {
       fire();
     });
 
-    row.append(tonicSel, accSel, modeSel, clefSel);
-    return row;
+    const clefRow = el("div", { class: "abc-gui-row" }, [
+      el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.clef]),
+      clefSel
+    ]);
+
+    keyRow.append(tonicSel, accSel, modeSel);
+    wrap.append(keyRow, clefRow);
+    return wrap;
   }
 
   private meterEditor(value: string, onChange: (v: string) => void): HTMLElement {
-    const row = el("div", { class: "abc-gui-row" }, [
-      el("span", { class: "abc-gui-label" }, ["M:"])
-    ]);
-    for (const preset of ["2/4", "3/4", "4/4", "6/8", "9/8", "12/8", "C", "C|"]) {
-      row.append(
-        button(preset, this.strings.panel.hints.meterPreset(preset), () => onChange(preset), {
-          active: value === preset
-        })
-      );
+    const PRESETS = ["2/4", "3/4", "4/4", "6/8", "9/8", "12/8", "C", "C|"] as const;
+    const CUSTOM = "__custom__";
+    const selectedPreset = PRESETS.includes(value as (typeof PRESETS)[number])
+      ? value
+      : CUSTOM;
+    const ratio = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(value);
+    let initialNum = ratio?.[1] ?? "4";
+    let initialDen = ratio?.[2] ?? "4";
+    if (!ratio && value === "C|") {
+      initialNum = "2";
+      initialDen = "2";
     }
-    const input = el("input", {
-      class: "abc-gui-input",
-      value
+
+    const row = el("div", { class: "abc-gui-row" }, [
+      el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.measure])
+    ]);
+    const sel = el("select", { class: "abc-gui-input" }) as HTMLSelectElement;
+    for (const preset of PRESETS) {
+      const opt = el("option", {
+        value: preset,
+        title: this.strings.panel.hints.meterPreset(preset)
+      }, [preset]) as HTMLOptionElement;
+      if (preset === selectedPreset) opt.selected = true;
+      sel.append(opt);
+    }
+    const customOpt = el("option", { value: CUSTOM }, [
+      this.strings.panel.meterEditor.custom
+    ]) as HTMLOptionElement;
+    if (selectedPreset === CUSTOM) customOpt.selected = true;
+    sel.append(customOpt);
+
+    const numInput = el("input", {
+      class: "abc-gui-input abc-gui-input-small",
+      value: initialNum,
+      type: "number",
+      min: "1"
     }) as HTMLInputElement;
-    input.addEventListener("input", () => onChange(input.value));
-    row.append(input);
+    const denInput = el("input", {
+      class: "abc-gui-input abc-gui-input-small",
+      value: initialDen,
+      type: "number",
+      min: "1"
+    }) as HTMLInputElement;
+
+    const syncCustomState = () => {
+      const isCustom = sel.value === CUSTOM;
+      numInput.readOnly = !isCustom;
+      denInput.readOnly = !isCustom;
+    };
+    const commitCustom = () => {
+      if (sel.value !== CUSTOM) return;
+      const n = Math.max(1, parseInt(numInput.value, 10) || 1);
+      const d = Math.max(1, parseInt(denInput.value, 10) || 1);
+      numInput.value = String(n);
+      denInput.value = String(d);
+      onChange(`${n}/${d}`);
+    };
+
+    sel.addEventListener("change", () => {
+      syncCustomState();
+      if (sel.value === CUSTOM) {
+        commitCustom();
+        return;
+      }
+      if (sel.value === "C") {
+        numInput.value = "4";
+        denInput.value = "4";
+      } else if (sel.value === "C|") {
+        numInput.value = "2";
+        denInput.value = "2";
+      } else {
+        const m = /^(\d+)\/(\d+)$/.exec(sel.value);
+        if (m) {
+          numInput.value = m[1]!;
+          denInput.value = m[2]!;
+        }
+      }
+      onChange(sel.value);
+    });
+    numInput.addEventListener("change", commitCustom);
+    denInput.addEventListener("change", commitCustom);
+    syncCustomState();
+
+    row.append(sel, numInput, el("span", {}, ["/"]), denInput);
     return row;
   }
 
@@ -1767,7 +1851,7 @@ export class PropertyPanel {
       min: "1"
     }) as HTMLInputElement;
     const bInput = el("input", {
-      class: "abc-gui-input abc-gui-input-small",
+      class: "abc-gui-input abc-gui-input-flex",
       value: bpm,
       type: "number",
       min: "1"

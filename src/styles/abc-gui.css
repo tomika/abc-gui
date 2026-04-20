@@ -381,7 +381,7 @@
   box-sizing: border-box;
   min-width: 0;
 }
-.abc-gui-input-small { width: 40px; flex: 0 0 40px; }
+.abc-gui-input-small { width: 50px; flex: 0 0 50px; }
 .abc-gui-input-flex { flex: 1 1 0; min-width: 0; }
 
 .abc-gui-input-invalid {

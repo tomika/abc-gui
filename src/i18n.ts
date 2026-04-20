@@ -40,6 +40,10 @@ export interface Strings {
       pitch: string;
       octave: string;
       kind: string;
+      barType: string;
+      measure: string;
+      key: string;
+      clef: string;
       unitL: string;
       length: string;
       dot: string;
@@ -90,6 +94,9 @@ export interface Strings {
       clefTenor: string;
       clefPerc: string;
       clefNone: string;
+    };
+    meterEditor: {
+      custom: string;
     };
     grace: { placeholder: string };
     annotation: {
@@ -218,6 +225,10 @@ export const en: Strings = {
       pitch: "Pitch",
       octave: "Octave",
       kind: "Kind",
+      barType: "Bar type",
+      measure: "Measure",
+      key: "Key",
+      clef: "Clef",
       unitL: "Unit (L:)",
       length: "Length (1..9)",
       dot: "Dot (.)",
@@ -281,6 +292,9 @@ export const en: Strings = {
       clefTenor: "tenor",
       clefPerc: "percussion",
       clefNone: "none"
+    },
+    meterEditor: {
+      custom: "custom"
     },
     grace: { placeholder: "e.g. cd" },
     annotation: {
@@ -430,6 +444,10 @@ export const hu: Strings = {
       pitch: "Hangmagasság",
       octave: "Oktáv",
       kind: "Típus",
+      barType: "Ütemvonal típusa",
+      measure: "Ütem",
+      key: "Hangnem",
+      clef: "Kulcs",
       unitL: "Egység (L:)",
       length: "Hossz (1..9)",
       dot: "Pont (.)",
@@ -495,6 +513,9 @@ export const hu: Strings = {
       clefTenor: "tenor",
       clefPerc: "ütő",
       clefNone: "nincs"
+    },
+    meterEditor: {
+      custom: "egyedi"
     },
     grace: { placeholder: "pl. cd" },
     annotation: {
