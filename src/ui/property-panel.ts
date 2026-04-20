@@ -1728,15 +1728,16 @@ export class PropertyPanel {
   }
 
   private meterEditor(value: string, onChange: (v: string) => void): HTMLElement {
-    const PRESETS = ["2/4", "3/4", "4/4", "6/8", "9/8", "12/8", "C", "C|"] as const;
-    const CUSTOM = "__custom__";
-    const selectedPreset = PRESETS.includes(value as (typeof PRESETS)[number])
-      ? value
-      : CUSTOM;
+    const PRESETS = ["2/4", "3/4", "4/4", "6/8", "9/8", "12/8", "𝄴", "𝄵"] as const;
+    const currentValue = value.trim();
+    let lastEmitted = currentValue;
+    const selectedPreset = PRESETS.includes(currentValue as (typeof PRESETS)[number])
+      ? currentValue
+      : currentValue || "4/4";
     const ratio = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(value);
     let initialNum = ratio?.[1] ?? "4";
     let initialDen = ratio?.[2] ?? "4";
-    if (!ratio && value === "C|") {
+    if (!ratio && value === "𝄵") {
       initialNum = "2";
       initialDen = "2";
     }
@@ -1753,49 +1754,50 @@ export class PropertyPanel {
       if (preset === selectedPreset) opt.selected = true;
       sel.append(opt);
     }
-    const customOpt = el("option", { value: CUSTOM }, [
-      this.strings.panel.meterEditor.custom
-    ]) as HTMLOptionElement;
-    if (selectedPreset === CUSTOM) customOpt.selected = true;
-    sel.append(customOpt);
+    if (!PRESETS.includes(selectedPreset as (typeof PRESETS)[number])) {
+      const customValueOpt = el(
+        "option",
+        { value: selectedPreset, title: selectedPreset },
+        [selectedPreset]
+      ) as HTMLOptionElement;
+      customValueOpt.selected = true;
+      sel.append(customValueOpt);
+    }
 
     const numInput = el("input", {
       class: "abc-gui-input abc-gui-input-small",
       value: initialNum,
       type: "number",
-      min: "1"
+      min: "1",
+      step: "1"
     }) as HTMLInputElement;
     const denInput = el("input", {
       class: "abc-gui-input abc-gui-input-small",
       value: initialDen,
       type: "number",
-      min: "1"
+      min: "1",
+      step: "1"
     }) as HTMLInputElement;
 
-    const syncCustomState = () => {
-      const isCustom = sel.value === CUSTOM;
-      numInput.readOnly = !isCustom;
-      denInput.readOnly = !isCustom;
-    };
-    const commitCustom = () => {
-      if (sel.value !== CUSTOM) return;
-      const n = Math.max(1, parseInt(numInput.value, 10) || 1);
-      const d = Math.max(1, parseInt(denInput.value, 10) || 1);
-      numInput.value = String(n);
-      denInput.value = String(d);
-      onChange(`${n}/${d}`);
+    const commitRatio = () => {
+      if (!numInput.value || !denInput.value) return;
+      const rawN = Number(numInput.value);
+      const rawD = Number(denInput.value);
+      if (!Number.isFinite(rawN) || !Number.isFinite(rawD)) return;
+      const n = Math.max(1, Math.trunc(rawN));
+      const d = Math.max(1, Math.trunc(rawD));
+      const next = `${n}/${d}`;
+      if (next !== lastEmitted) {
+        lastEmitted = next;
+        onChange(next);
+      }
     };
 
     sel.addEventListener("change", () => {
-      syncCustomState();
-      if (sel.value === CUSTOM) {
-        commitCustom();
-        return;
-      }
-      if (sel.value === "C") {
+      if (sel.value === "𝄴") {
         numInput.value = "4";
         denInput.value = "4";
-      } else if (sel.value === "C|") {
+      } else if (sel.value === "𝄵") {
         numInput.value = "2";
         denInput.value = "2";
       } else {
@@ -1805,11 +1807,13 @@ export class PropertyPanel {
           denInput.value = m[2]!;
         }
       }
-      onChange(sel.value);
+      if (sel.value !== lastEmitted) {
+        lastEmitted = sel.value;
+        onChange(sel.value);
+      }
     });
-    numInput.addEventListener("change", commitCustom);
-    denInput.addEventListener("change", commitCustom);
-    syncCustomState();
+    numInput.addEventListener("input", commitRatio);
+    denInput.addEventListener("input", commitRatio);
 
     row.append(sel, numInput, el("span", {}, ["/"]), denInput);
     return row;
