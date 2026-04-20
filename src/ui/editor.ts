@@ -92,7 +92,11 @@ export class AbcEditor {
     // instead of being squeezed into the side column. It is always inserted
     // in the DOM so the user can toggle it on/off via the toolbar, but
     // `hidden` removes it from layout completely when not visible.
-    this.container.append(toolbarHost, body, rawHost);
+    // contentHost fills the space below the toolbar and scrolls in narrow
+    // mode so the toolbar is always visible.
+    const contentHost = el("div", { class: "abc-gui-content-host" });
+    contentHost.append(body, rawHost);
+    this.container.append(toolbarHost, contentHost);
     this.rawVisible = !opts.hideRawView;
     rawHost.hidden = !this.rawVisible;
     this.updateRawLayoutState();

@@ -39,7 +39,7 @@
   display: flex;
   flex-direction: column;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--abc-text);
   background: var(--abc-bg);
   border: 1px solid var(--abc-border-strong);
@@ -108,7 +108,7 @@
   min-width: var(--abc-control-size);
   height: var(--abc-control-size);
   padding: 0 5px;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1;
   background: var(--abc-btn-bg);
   border: 1px solid var(--abc-border-strong);
@@ -222,6 +222,18 @@
   filter: brightness(0.92);
 }
 
+/* Wrapper that holds body + raw host. Fills remaining space after toolbar.
+ * container-type: size lets children use cqh units (% of this element's
+ * definite height) in narrow mode so max-height caps work correctly. */
+.abc-gui-content-host {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  container-type: size;
+}
+
 /* Raw view is pinned below the score+panel row and spans the full width. */
 .abc-gui-raw-host {
   display: flex;
@@ -240,17 +252,21 @@
   display: none !important;
 }
 
-/* Narrow: stack panes vertically. The root container will scroll its inner
- * elements but the root itself remains fixed to 100%. */
+/* Narrow: stack panes vertically. Toolbar is pinned; content-host scrolls
+ * so the toolbar never scrolls away. Each pane is capped at half the
+ * available height (root height minus toolbar). */
 @container (max-width: 780px) {
   .abc-gui-root {
-    overflow-x: hidden;
-    overflow-y: auto;
+    overflow: hidden;
   }
   .abc-gui-toolbar-host {
     width: auto;
     box-sizing: border-box;
-    position: static;
+    flex-shrink: 0;
+  }
+  .abc-gui-content-host {
+    overflow-y: auto;
+    overflow-x: hidden;
   }
   .abc-gui-body {
     width: auto;
@@ -264,14 +280,12 @@
     flex: 0 0 auto !important;
     width: auto !important;
     height: auto !important;
-    max-height: 50vh;
-    max-height: 50dvh;
+    max-height: 50cqh;
     overflow: auto !important;
   }
   .abc-gui-raw-host {
     width: auto;
-    max-height: 50vh;
-    max-height: 50dvh;
+    max-height: 50cqh;
     overflow: auto;
   }
   .abc-gui-score-host > svg {
@@ -281,13 +295,16 @@
 }
 @media (max-width: 780px) {
   .abc-gui-root {
-    overflow-x: hidden;
-    overflow-y: auto;
+    overflow: hidden;
   }
   .abc-gui-toolbar-host {
     width: auto;
     box-sizing: border-box;
-    position: static;
+    flex-shrink: 0;
+  }
+  .abc-gui-content-host {
+    overflow-y: auto;
+    overflow-x: hidden;
   }
   .abc-gui-body {
     width: auto;
@@ -301,14 +318,12 @@
     flex: 0 0 auto !important;
     width: auto !important;
     height: auto !important;
-    max-height: 50vh;
-    max-height: 50dvh;
+    max-height: 50cqh;
     overflow: auto !important;
   }
   .abc-gui-raw-host {
     width: auto;
-    max-height: 50vh;
-    max-height: 50dvh;
+    max-height: 50cqh;
     overflow: auto;
   }
   .abc-gui-score-host > svg {
@@ -355,7 +370,7 @@
 .abc-gui-label {
   min-width: 70px;
   color: var(--abc-text-subtle);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .abc-gui-readout {
@@ -380,6 +395,7 @@
   color: var(--abc-text);
   box-sizing: border-box;
   min-width: 0;
+  font-size: 13px;
 }
 .abc-gui-input-small { width: 50px; flex: 0 0 50px; }
 .abc-gui-input-flex { flex: 1 1 0; min-width: 0; }
