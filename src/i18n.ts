@@ -83,13 +83,13 @@ export interface Strings {
       };
     };
     keyEditor: {
-      clefNone: string;
+      clefDefault: string;
       clefTreble: string;
       clefBass: string;
       clefAlto: string;
       clefTenor: string;
       clefPerc: string;
-      clefNoneExplicit: string;
+      clefNone: string;
     };
     grace: { placeholder: string };
     annotation: {
@@ -274,13 +274,13 @@ export const en: Strings = {
       }
     },
     keyEditor: {
-      clefNone: "clef: (none)",
-      clefTreble: "clef: treble",
-      clefBass: "clef: bass",
-      clefAlto: "clef: alto",
-      clefTenor: "clef: tenor",
-      clefPerc: "clef: percussion",
-      clefNoneExplicit: "clef: none"
+      clefDefault: "(auto)",
+      clefTreble: "treble",
+      clefBass: "bass",
+      clefAlto: "alto",
+      clefTenor: "tenor",
+      clefPerc: "percussion",
+      clefNone: "none"
     },
     grace: { placeholder: "e.g. cd" },
     annotation: {
@@ -488,13 +488,13 @@ export const hu: Strings = {
       }
     },
     keyEditor: {
-      clefNone: "kulcs: (nincs)",
-      clefTreble: "kulcs: violin",
-      clefBass: "kulcs: basszus",
-      clefAlto: "kulcs: alt",
-      clefTenor: "kulcs: tenor",
-      clefPerc: "kulcs: ütő",
-      clefNoneExplicit: "kulcs: nincs"
+      clefDefault: "(auto)",
+      clefTreble: "violin",
+      clefBass: "basszus",
+      clefAlto: "alt",
+      clefTenor: "tenor",
+      clefPerc: "ütő",
+      clefNone: "nincs"
     },
     grace: { placeholder: "pl. cd" },
     annotation: {

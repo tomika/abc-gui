@@ -1690,13 +1690,13 @@ export class PropertyPanel {
     const clefSel = el("select", { class: "abc-gui-input" }) as HTMLSelectElement;
     const ck = this.strings.panel.keyEditor;
     for (const [val, label] of [
-      ["", ck.clefNone],
+      ["", ck.clefDefault],
       ["treble", ck.clefTreble],
       ["bass", ck.clefBass],
       ["alto", ck.clefAlto],
       ["tenor", ck.clefTenor],
       ["perc", ck.clefPerc],
-      ["none", ck.clefNoneExplicit]
+      ["none", ck.clefNone]
     ] as const) {
       const o = el("option", { value: val }, [label]) as HTMLOptionElement;
       if (val === clef) o.selected = true;
