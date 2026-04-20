@@ -41,6 +41,8 @@ export class RawView {
         // Preserve caret as best we can across external edits.
         const savedStart = this.textarea.selectionStart;
         const savedEnd = this.textarea.selectionEnd;
+        const savedScrollTop = this.textarea.scrollTop;
+        const savedScrollLeft = this.textarea.scrollLeft;
         this.textarea.value = this.doc.value;
         const clamp = (n: number) => Math.min(n, this.textarea.value.length);
         try {
@@ -48,6 +50,8 @@ export class RawView {
         } catch {
           /* ignore */
         }
+        this.textarea.scrollTop = Math.min(savedScrollTop, this.textarea.scrollHeight);
+        this.textarea.scrollLeft = Math.min(savedScrollLeft, this.textarea.scrollWidth);
       }
     });
     const emitCaret = () => {
@@ -89,10 +93,14 @@ export class RawView {
     ) {
       return;
     }
+    const savedScrollTop = this.textarea.scrollTop;
+    const savedScrollLeft = this.textarea.scrollLeft;
     try {
       this.textarea.setSelectionRange(start, end);
     } catch {
       /* ignore */
     }
+    this.textarea.scrollTop = Math.min(savedScrollTop, this.textarea.scrollHeight);
+    this.textarea.scrollLeft = Math.min(savedScrollLeft, this.textarea.scrollWidth);
   }
 }

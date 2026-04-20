@@ -70,6 +70,8 @@ export interface Strings {
       addAnnotation: string;
       pickChordSymbol: string;
       pickChordNotes: string;
+      convertNoteToChord: string;
+      convertSingleNoteChordToNote: string;
       expandDecorations: string;
       collapseDecorations: string;
       noAccidental: string;
@@ -268,6 +270,8 @@ export const en: Strings = {
       addAnnotation: "add chord symbol or annotation (shortcut: +)",
       pickChordSymbol: "Pick chord symbol…",
       pickChordNotes: "Pick chord notes…",
+      convertNoteToChord: "Convert note to single-note chord",
+      convertSingleNoteChordToNote: "Convert single-note chord to note",
       expandDecorations: "Show more decorations…",
       collapseDecorations: "Hide additional decorations",
       noAccidental: "no accidental",
@@ -489,6 +493,8 @@ export const hu: Strings = {
         "akkordszimbólum vagy felirat hozzáadása (gyorsbillentyű: +)",
       pickChordSymbol: "Akkordszimbólum választása…",
       pickChordNotes: "Akkordhangok választása…",
+      convertNoteToChord: "Hang átalakítása egyhangú akkorddá",
+      convertSingleNoteChordToNote: "Egyhangú akkord átalakítása hanggá",
       expandDecorations: "További díszítések mutatása…",
       collapseDecorations: "További díszítések elrejtése",
       noAccidental: "nincs módosítójel",

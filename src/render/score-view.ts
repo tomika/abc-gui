@@ -99,6 +99,8 @@ export class ScoreView {
   }
 
   private render(): void {
+    const prevScrollTop = this.host.scrollTop;
+    const prevScrollLeft = this.host.scrollLeft;
     const api = abcjs as unknown as {
       renderAbc: (
         host: HTMLElement | string,
@@ -167,6 +169,9 @@ export class ScoreView {
     hostStyle.overflow = "";
     hostStyle.overflowX = "auto";
     hostStyle.overflowY = "auto";
+    // Keep viewport stable while score SVG is re-generated after edits.
+    this.host.scrollTop = Math.min(prevScrollTop, this.host.scrollHeight);
+    this.host.scrollLeft = Math.min(prevScrollLeft, this.host.scrollWidth);
     this.applySelectionStyle();
     for (const l of [...this.renderListeners]) l();
   }

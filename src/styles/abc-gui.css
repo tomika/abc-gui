@@ -345,6 +345,11 @@
   padding-bottom: 4px;
   border-bottom: 1px solid var(--abc-border);
 }
+.abc-gui-panel-header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .abc-gui-kind { font-weight: 600; }
 .abc-gui-range {
   color: var(--abc-text-muted);

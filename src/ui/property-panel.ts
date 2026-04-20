@@ -322,6 +322,21 @@ export class PropertyPanel {
   // ------------------------------------------------------------------
 
   private render(): void {
+    const prevScrollTop = this.host.scrollTop;
+    const prevScrollLeft = this.host.scrollLeft;
+    const active = document.activeElement;
+    let restoreFocusKey: string | null = null;
+    let restoreSelStart: number | null = null;
+    let restoreSelEnd: number | null = null;
+    if (
+      active instanceof HTMLInputElement &&
+      this.host.contains(active) &&
+      typeof active.dataset.abcGuiFocusKey === "string"
+    ) {
+      restoreFocusKey = active.dataset.abcGuiFocusKey;
+      restoreSelStart = active.selectionStart;
+      restoreSelEnd = active.selectionEnd;
+    }
     clear(this.host);
     if (!this.current) {
       this.host.append(
@@ -329,6 +344,8 @@ export class PropertyPanel {
           this.strings.panel.emptyHint
         ])
       );
+      this.host.scrollTop = Math.min(prevScrollTop, this.host.scrollHeight);
+      this.host.scrollLeft = Math.min(prevScrollLeft, this.host.scrollWidth);
       return;
     }
     const { startChar, endChar } = this.current;
@@ -343,15 +360,45 @@ export class PropertyPanel {
     const prefix = readPrefix(inner, 0);
     const prefixEnd = startChar + leadingWs + prefix.end;
     const rawCoreEnd = endChar - trailingWs;
-    const coreRange = this.normalizeCoreRange(prefixEnd, rawCoreEnd);
+    const rawCore = this.doc.slice(prefixEnd, rawCoreEnd);
+    const rawKind = this.classify(rawCore);
+    // Do not trim trailing ')' for metadata fields like T:... (excerpt).
+    // Wrapper normalization is only for music-element spans.
+    const coreRange =
+      rawKind === "info-line" || rawKind === "inline-field"
+        ? { coreStart: prefixEnd, coreEnd: rawCoreEnd }
+        : this.normalizeCoreRange(prefixEnd, rawCoreEnd);
     const coreStart = coreRange.coreStart;
     const coreEnd = coreRange.coreEnd;
     const core = this.doc.slice(coreStart, coreEnd);
     const kind = this.classify(core);
 
+    const headerRight = el("span", { class: "abc-gui-panel-header-right" });
+    if (kind === "note") {
+      headerRight.append(
+        button(
+          "→[♪]",
+          this.strings.panel.hints.convertNoteToChord,
+          () => this.convertNoteToSingleNoteChord(core, coreStart, coreEnd)
+        )
+      );
+    } else if (kind === "chord") {
+      const parsedChord = readChord(core.trim(), 0);
+      if (parsedChord && parsedChord.notes.length === 1) {
+        headerRight.append(
+          button(
+            "→♪",
+            this.strings.panel.hints.convertSingleNoteChordToNote,
+            () => this.convertSingleNoteChordToNote(core, coreStart, coreEnd)
+          )
+        );
+      }
+    }
+    headerRight.append(el("span", { class: "abc-gui-range" }, [`${startChar}…${endChar}`]));
+
     const header = el("div", { class: "abc-gui-panel-header" }, [
       el("span", { class: "abc-gui-kind" }, [this.kindLabel(kind)]),
-      el("span", { class: "abc-gui-range" }, [`${startChar}…${endChar}`])
+      headerRight
     ]);
     this.host.append(header);
 
@@ -360,6 +407,16 @@ export class PropertyPanel {
     // grace-notes even when none are currently attached.
     const supportsPrefix =
       kind === "note" || kind === "chord" || kind === "rest";
+
+    let rawEditorStart = startChar;
+    let rawEditorEnd = endChar;
+    if (supportsPrefix) {
+      const b = this.bindingState(coreStart, coreEnd);
+      if (b.hasTriplet) rawEditorStart = Math.max(0, Math.min(rawEditorStart, b.leftStart - 2));
+      else if (b.hasSlurStart) rawEditorStart = Math.max(0, Math.min(rawEditorStart, b.leftStart - 1));
+      if (b.hasSlurEnd) rawEditorEnd = Math.max(rawEditorEnd, b.rightStart + 1);
+      if (b.hasTie) rawEditorEnd = Math.max(rawEditorEnd, b.tieProbe + 1);
+    }
 
     switch (kind) {
       case "note":
@@ -402,8 +459,40 @@ export class PropertyPanel {
       );
     }
 
-    // Raw fallback — always present (covers the WHOLE selection, prefix + core).
-    this.host.append(this.buildRawEditor(raw, startChar, endChar));
+    // Raw fallback — includes the currently-active wrapper markers around
+    // note/chord/rest (triplet/slur/tie) so the field reflects what the
+    // dedicated Group buttons just changed.
+    this.host.append(
+      this.buildRawEditor(
+        this.doc.slice(rawEditorStart, rawEditorEnd),
+        rawEditorStart,
+        rawEditorEnd
+      )
+    );
+    if (restoreFocusKey) {
+      const restoreTarget = this.host.querySelector<HTMLInputElement>(
+        `input[data-abc-gui-focus-key="${restoreFocusKey}"]`
+      );
+      if (restoreTarget) {
+        try {
+          restoreTarget.focus({ preventScroll: true });
+        } catch {
+          restoreTarget.focus();
+        }
+        if (restoreSelStart !== null && restoreSelEnd !== null) {
+          const max = restoreTarget.value.length;
+          const s = Math.max(0, Math.min(restoreSelStart, max));
+          const e = Math.max(0, Math.min(restoreSelEnd, max));
+          try {
+            restoreTarget.setSelectionRange(s, e);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    }
+    this.host.scrollTop = Math.min(prevScrollTop, this.host.scrollHeight);
+    this.host.scrollLeft = Math.min(prevScrollLeft, this.host.scrollWidth);
   }
 
   private separator(): HTMLElement {
@@ -421,7 +510,14 @@ export class PropertyPanel {
     const prefix = readPrefix(inner, 0);
     const prefixEnd = selStart + leadingWs + prefix.end;
     const rawCoreEnd = selEnd - trailingWs;
-    const coreRange = this.normalizeCoreRange(prefixEnd, rawCoreEnd);
+    const rawCore = this.doc.slice(prefixEnd, rawCoreEnd);
+    const rawKind = this.classify(rawCore);
+    // Keep literal parentheses in header/inline fields (e.g. T:... (excerpt)).
+    // Wrapper stripping is only needed for music-element spans.
+    const coreRange =
+      rawKind === "info-line" || rawKind === "inline-field"
+        ? { coreStart: prefixEnd, coreEnd: rawCoreEnd }
+        : this.normalizeCoreRange(prefixEnd, rawCoreEnd);
     const coreStart = coreRange.coreStart;
     const coreEnd = coreRange.coreEnd;
     const core = this.doc.slice(coreStart, coreEnd);
@@ -999,7 +1095,8 @@ export class PropertyPanel {
         // Plain text editor for T:, C:, X:, V:, etc.
         const input = el("input", {
           class: "abc-gui-input abc-gui-input-flex",
-          value: parsed.value
+          value: parsed.value,
+          dataset: { abcGuiFocusKey: `info-${parsed.name}` }
         }) as HTMLInputElement;
         input.addEventListener("input", () => apply({ value: input.value }));
         this.host.append(
@@ -1017,6 +1114,37 @@ export class PropertyPanel {
   private renderDecorationsForElement(_raw: string, _start: number, _end: number) {
     // Unknown element kinds have no dedicated editor; the raw-text editor
     // below still lets the user modify the span freely.
+  }
+
+  private convertNoteToSingleNoteChord(raw: string, start: number, end: number): void {
+    const parsed = readNote(raw.trim(), 0);
+    if (!parsed) return;
+    const next: ParsedChord = {
+      notes: [{
+        accidental: parsed.accidental,
+        letter: parsed.letter,
+        octave: parsed.octave,
+        num: 1,
+        den: 1
+      }],
+      num: parsed.num,
+      den: parsed.den
+    };
+    this.applyRange(start, end, writeChord(next));
+  }
+
+  private convertSingleNoteChordToNote(raw: string, start: number, end: number): void {
+    const parsed = readChord(raw.trim(), 0);
+    if (!parsed || parsed.notes.length !== 1) return;
+    const note = parsed.notes[0]!;
+    const next: ParsedNote = {
+      accidental: note.accidental,
+      letter: note.letter,
+      octave: note.octave,
+      num: parsed.num,
+      den: parsed.den
+    };
+    this.applyRange(start, end, writeNote(next));
   }
 
   /**
