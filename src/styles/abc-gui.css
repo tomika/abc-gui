@@ -442,6 +442,19 @@
   font-family: ui-monospace, Menlo, monospace;
 }
 
+.abc-gui-row.abc-gui-raw {
+  align-items: center;
+}
+
+.abc-gui-row.abc-gui-raw .abc-gui-label,
+.abc-gui-row.abc-gui-raw .abc-gui-readout {
+  align-self: center;
+}
+
+.abc-gui-row.abc-gui-raw .abc-gui-readout {
+  line-height: var(--abc-control-size);
+}
+
 .abc-gui-muted {
   color: var(--abc-text-muted);
   font-size: 12px;

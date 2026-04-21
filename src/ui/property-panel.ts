@@ -513,17 +513,37 @@ export class PropertyPanel {
         return !!parsed && !this.isInfoFieldEditable(parsed.name);
       })();
 
+    const parsedInfoForRaw =
+      kind === "info-line"
+        ? this.parseInfoField(core, /*inline*/ false)
+        : kind === "inline-field"
+          ? this.parseInfoField(core, /*inline*/ true)
+          : null;
+
     // Raw fallback — includes the currently-active wrapper markers around
     // note/chord/rest (triplet/slur/tie) so the field reflects what the
     // dedicated Group buttons just changed.
-    this.host.append(
-      this.buildRawEditor(
-        this.doc.slice(rawEditorStart, rawEditorEnd),
-        rawEditorStart,
-        rawEditorEnd,
-        rawReadOnly
-      )
-    );
+    if (parsedInfoForRaw) {
+      this.host.append(
+        this.buildInfoFieldRawEditor(
+          parsedInfoForRaw,
+          this.doc.slice(rawEditorStart, rawEditorEnd),
+          rawEditorStart,
+          rawEditorEnd,
+          kind === "inline-field",
+          rawReadOnly
+        )
+      );
+    } else {
+      this.host.append(
+        this.buildRawEditor(
+          this.doc.slice(rawEditorStart, rawEditorEnd),
+          rawEditorStart,
+          rawEditorEnd,
+          rawReadOnly
+        )
+      );
+    }
     if (kind === "bar") {
       this.host.append(
         this.separator(),
@@ -1166,6 +1186,9 @@ export class PropertyPanel {
         break;
       case "Q":
         this.host.append(this.tempoEditor(parsed.value, (v) => apply({ value: v })));
+        break;
+      case "V":
+        this.host.append(this.voiceEditor(parsed.value, (v) => apply({ value: v })));
         break;
       default: {
         // Plain text editor for T:, C:, X:, V:, etc.
@@ -1926,33 +1949,54 @@ export class PropertyPanel {
   }
 
   private meterEditor(value: string, onChange: (v: string) => void): HTMLElement {
-    const PRESETS = ["2/4", "3/4", "4/4", "6/8", "9/8", "12/8", "𝄴", "𝄵"] as const;
-    const currentValue = value.trim();
+    const PRESETS = [
+      { value: "2/4", label: "2/4" },
+      { value: "3/4", label: "3/4" },
+      { value: "4/4", label: "4/4" },
+      { value: "6/8", label: "6/8" },
+      { value: "9/8", label: "9/8" },
+      { value: "12/8", label: "12/8" },
+      { value: "C", label: "𝄴" },
+      { value: "C|", label: "𝄵" }
+    ] as const;
+    const currentValueRaw = value.trim();
+    const currentValue =
+      currentValueRaw === "𝄴" ? "C" :
+      currentValueRaw === "𝄵" ? "C|" :
+      currentValueRaw;
     let lastEmitted = currentValue;
-    const selectedPreset = PRESETS.includes(currentValue as (typeof PRESETS)[number])
+    const selectedPreset = PRESETS.some((p) => p.value === currentValue)
       ? currentValue
       : currentValue || "4/4";
-    const ratio = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(value);
+    const ratio = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(currentValue);
     let initialNum = ratio?.[1] ?? "4";
     let initialDen = ratio?.[2] ?? "4";
-    if (!ratio && value === "𝄵") {
+    if (!ratio && currentValue === "C|") {
       initialNum = "2";
       initialDen = "2";
+    } else if (!ratio && currentValue === "C") {
+      initialNum = "4";
+      initialDen = "4";
     }
 
     const row = el("div", { class: "abc-gui-row" }, [
       el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.measure])
     ]);
+    const emit = (next: string) => {
+      if (next === lastEmitted) return;
+      lastEmitted = next;
+      onChange(next);
+    };
     const sel = el("select", { class: "abc-gui-input" }) as HTMLSelectElement;
     for (const preset of PRESETS) {
       const opt = el("option", {
-        value: preset,
-        title: this.strings.panel.hints.meterPreset(preset)
-      }, [preset]) as HTMLOptionElement;
-      if (preset === selectedPreset) opt.selected = true;
+        value: preset.value,
+        title: this.strings.panel.hints.meterPreset(preset.value)
+      }, [preset.label]) as HTMLOptionElement;
+      if (preset.value === selectedPreset) opt.selected = true;
       sel.append(opt);
     }
-    if (!PRESETS.includes(selectedPreset as (typeof PRESETS)[number])) {
+    if (!PRESETS.some((p) => p.value === selectedPreset)) {
       const customValueOpt = el(
         "option",
         { value: selectedPreset, title: selectedPreset },
@@ -1985,17 +2029,14 @@ export class PropertyPanel {
       const n = Math.max(1, Math.trunc(rawN));
       const d = Math.max(1, Math.trunc(rawD));
       const next = `${n}/${d}`;
-      if (next !== lastEmitted) {
-        lastEmitted = next;
-        onChange(next);
-      }
+      emit(next);
     };
 
     sel.addEventListener("change", () => {
-      if (sel.value === "𝄴") {
+      if (sel.value === "C") {
         numInput.value = "4";
         denInput.value = "4";
-      } else if (sel.value === "𝄵") {
+      } else if (sel.value === "C|") {
         numInput.value = "2";
         denInput.value = "2";
       } else {
@@ -2005,10 +2046,7 @@ export class PropertyPanel {
           denInput.value = m[2]!;
         }
       }
-      if (sel.value !== lastEmitted) {
-        lastEmitted = sel.value;
-        onChange(sel.value);
-      }
+      emit(sel.value);
     });
     numInput.addEventListener("input", commitRatio);
     denInput.addEventListener("input", commitRatio);
@@ -2032,7 +2070,7 @@ export class PropertyPanel {
   }
 
   private tempoEditor(value: string, onChange: (v: string) => void): HTMLElement {
-    // Q:1/4=120 — offer beat fraction + BPM inputs with fallback to free text.
+    // Q:1/4=120 — offer beat fraction + BPM inputs.
     const m = /^(\d+)\/(\d+)\s*=\s*(\d+)/.exec(value);
     const beatNum = m ? m[1]! : "1";
     const beatDen = m ? m[2]! : "4";
@@ -2066,6 +2104,333 @@ export class PropertyPanel {
     bInput.addEventListener("change", sync);
     row.append(nInput, el("span", {}, ["/"]), dInput, el("span", {}, ["="]), bInput);
     return row;
+  }
+
+  private voiceEditor(value: string, onChange: (v: string) => void): HTMLElement {
+    type VoiceModel = {
+      id: string;
+      name: string;
+      subname: string;
+      clef: string;
+      middle: string;
+      stem: "" | "up" | "down";
+      transpose: string;
+      octave: string;
+      stafflines: string;
+      staffscale: string;
+      scale: string;
+      score: string;
+      suppressChords: boolean;
+      extras: string[];
+    };
+
+    const tokenize = (src: string): string[] =>
+      src.match(/(?:[^\s"]+|"[^"]*")+/g) ?? [];
+    const unquote = (src: string): string =>
+      src.length >= 2 && src[0] === '"' && src[src.length - 1] === '"'
+        ? src.slice(1, -1).replace(/\\"/g, '"')
+        : src;
+    const quoteIfNeeded = (src: string): string => {
+      if (src.length === 0) return '""';
+      if (/^[A-Za-z0-9_+\-.,:]+$/.test(src)) return src;
+      return `"${src.replace(/"/g, '\\"')}"`;
+    };
+
+    const tokens = tokenize(value.trim());
+    const model: VoiceModel = {
+      id: tokens[0] ?? "1",
+      name: "",
+      subname: "",
+      clef: "",
+      middle: "",
+      stem: "",
+      transpose: "",
+      octave: "",
+      stafflines: "",
+      staffscale: "",
+      scale: "",
+      score: "",
+      suppressChords: false,
+      extras: []
+    };
+
+    const clefKeywords = new Set([
+      "treble", "bass", "alto", "tenor", "perc", "none",
+      "treble+8", "treble-8", "treble^8", "treble_8",
+      "bass+8", "bass-8", "bass+16", "bass-16", "bass^8", "bass_8",
+      "alto+8", "alto-8", "alto^8", "alto_8",
+      "tenor+8", "tenor-8"
+    ]);
+
+    const consumeValue = (arr: string[], i: number, inlineValue: string): { value: string; next: number } => {
+      if (inlineValue.length > 0) return { value: inlineValue, next: i };
+      if (i + 1 < arr.length && arr[i + 1] === "=") {
+        const v = i + 2 < arr.length ? arr[i + 2]! : "";
+        return { value: v, next: i + 2 };
+      }
+      if (i + 1 < arr.length) return { value: arr[i + 1]!, next: i + 1 };
+      return { value: "", next: i };
+    };
+
+    for (let i = 1; i < tokens.length; i++) {
+      const tok = tokens[i]!;
+      const kv = /^([A-Za-z]+)=(.*)$/.exec(tok);
+      const key = (kv ? kv[1] : tok).toLowerCase();
+      const inlineValue = kv ? kv[2]! : "";
+
+      const setString = (setter: (v: string) => void) => {
+        const out = consumeValue(tokens, i, inlineValue);
+        setter(unquote(out.value));
+        i = out.next;
+      };
+
+      switch (key) {
+        case "name":
+        case "nm":
+          setString((v) => { model.name = v; });
+          break;
+        case "subname":
+        case "sname":
+        case "snm":
+          setString((v) => { model.subname = v; });
+          break;
+        case "clef":
+        case "cl":
+          setString((v) => { model.clef = v; });
+          break;
+        case "middle":
+        case "m":
+          setString((v) => { model.middle = v; });
+          break;
+        case "stem":
+        case "stems":
+          setString((v) => { model.stem = (v === "up" || v === "down") ? v : ""; });
+          break;
+        case "transpose":
+          setString((v) => { model.transpose = v; });
+          break;
+        case "octave":
+          setString((v) => { model.octave = v; });
+          break;
+        case "stafflines":
+          setString((v) => { model.stafflines = v; });
+          break;
+        case "staffscale":
+          setString((v) => { model.staffscale = v; });
+          break;
+        case "scale":
+          setString((v) => { model.scale = v; });
+          break;
+        case "score":
+          setString((v) => { model.score = v; });
+          break;
+        case "gchords":
+        case "gch": {
+          const out = consumeValue(tokens, i, inlineValue);
+          const val = out.value.trim();
+          model.suppressChords = val.length === 0 || val === "0" || val.toLowerCase() === "true";
+          i = out.next;
+          break;
+        }
+        case "up":
+        case "down":
+          model.stem = key;
+          break;
+        default:
+          if (!kv && clefKeywords.has(tok.toLowerCase())) {
+            model.clef = tok;
+          } else {
+            model.extras.push(tok);
+          }
+          break;
+      }
+    }
+
+    const serialize = (): string => {
+      const out: string[] = [model.id.trim() || "1"];
+      if (model.name.trim()) out.push(`name=${quoteIfNeeded(model.name.trim())}`);
+      if (model.subname.trim()) out.push(`subname=${quoteIfNeeded(model.subname.trim())}`);
+      if (model.clef.trim()) out.push(`clef=${model.clef.trim()}`);
+      if (model.middle.trim()) out.push(`middle=${model.middle.trim()}`);
+      if (model.stem) out.push(`stem=${model.stem}`);
+      if (model.transpose.trim()) out.push(`transpose=${model.transpose.trim()}`);
+      if (model.octave.trim()) out.push(`octave=${model.octave.trim()}`);
+      if (model.stafflines.trim()) out.push(`stafflines=${model.stafflines.trim()}`);
+      if (model.staffscale.trim()) out.push(`staffscale=${model.staffscale.trim()}`);
+      if (model.scale.trim()) out.push(`scale=${model.scale.trim()}`);
+      if (model.score.trim()) out.push(`score=${model.score.trim()}`);
+      if (model.suppressChords) out.push("gchords");
+      if (model.extras.length > 0) out.push(...model.extras.filter((t) => t.trim().length > 0));
+      return out.join(" ");
+    };
+
+    const commit = () => onChange(serialize());
+
+    const wrap = el("div");
+    const row = (...children: Array<Node | string>) => el("div", { class: "abc-gui-row" }, children);
+
+    const idInput = el("input", {
+      class: "abc-gui-input abc-gui-input-small",
+      value: model.id,
+      dataset: { abcGuiFocusKey: "info-V-id" }
+    }) as HTMLInputElement;
+    idInput.addEventListener("input", () => {
+      model.id = idInput.value;
+      commit();
+    });
+
+    const nameInput = el("input", {
+      class: "abc-gui-input abc-gui-input-flex",
+      value: model.name,
+      placeholder: "voice name",
+      dataset: { abcGuiFocusKey: "info-V-name" }
+    }) as HTMLInputElement;
+    nameInput.addEventListener("input", () => {
+      model.name = nameInput.value;
+      commit();
+    });
+
+    const subnameInput = el("input", {
+      class: "abc-gui-input abc-gui-input-flex",
+      value: model.subname,
+      placeholder: "short name",
+      dataset: { abcGuiFocusKey: "info-V-subname" }
+    }) as HTMLInputElement;
+    subnameInput.addEventListener("input", () => {
+      model.subname = subnameInput.value;
+      commit();
+    });
+
+    const clefInput = el("input", {
+      class: "abc-gui-input abc-gui-input-flex",
+      value: model.clef,
+      placeholder: "treble, bass, treble-8, perc, ...",
+      dataset: { abcGuiFocusKey: "info-V-clef" }
+    }) as HTMLInputElement;
+    clefInput.addEventListener("input", () => {
+      model.clef = clefInput.value;
+      commit();
+    });
+
+    const middleInput = el("input", {
+      class: "abc-gui-input abc-gui-input-small",
+      value: model.middle,
+      placeholder: "B",
+      dataset: { abcGuiFocusKey: "info-V-middle" }
+    }) as HTMLInputElement;
+    middleInput.addEventListener("input", () => {
+      model.middle = middleInput.value;
+      commit();
+    });
+
+    const stemSel = el("select", { class: "abc-gui-input" }) as HTMLSelectElement;
+    for (const [val, label] of [["", "auto"], ["up", "up"], ["down", "down"]] as const) {
+      const o = el("option", { value: val }, [label]) as HTMLOptionElement;
+      if (model.stem === val) o.selected = true;
+      stemSel.append(o);
+    }
+    stemSel.addEventListener("change", () => {
+      model.stem = stemSel.value === "up" || stemSel.value === "down"
+        ? stemSel.value
+        : "";
+      commit();
+    });
+
+    const numericInput = (valueText: string, focusKey: string, placeholder: string): HTMLInputElement => {
+      const inp = el("input", {
+        class: "abc-gui-input abc-gui-input-small",
+        type: "number",
+        value: valueText,
+        placeholder,
+        dataset: { abcGuiFocusKey: focusKey }
+      }) as HTMLInputElement;
+      return inp;
+    };
+
+    const transposeInput = numericInput(model.transpose, "info-V-transpose", "0");
+    transposeInput.addEventListener("input", () => {
+      model.transpose = transposeInput.value;
+      commit();
+    });
+    const octaveInput = numericInput(model.octave, "info-V-octave", "0");
+    octaveInput.addEventListener("input", () => {
+      model.octave = octaveInput.value;
+      commit();
+    });
+    const staffLinesInput = numericInput(model.stafflines, "info-V-stafflines", "5");
+    staffLinesInput.addEventListener("input", () => {
+      model.stafflines = staffLinesInput.value;
+      commit();
+    });
+    const staffScaleInput = el("input", {
+      class: "abc-gui-input abc-gui-input-small",
+      type: "number",
+      step: "0.1",
+      value: model.staffscale,
+      placeholder: "1",
+      dataset: { abcGuiFocusKey: "info-V-staffscale" }
+    }) as HTMLInputElement;
+    staffScaleInput.addEventListener("input", () => {
+      model.staffscale = staffScaleInput.value;
+      commit();
+    });
+    const scaleInput = el("input", {
+      class: "abc-gui-input abc-gui-input-small",
+      type: "number",
+      step: "0.1",
+      value: model.scale,
+      placeholder: "1",
+      dataset: { abcGuiFocusKey: "info-V-scale" }
+    }) as HTMLInputElement;
+    scaleInput.addEventListener("input", () => {
+      model.scale = scaleInput.value;
+      commit();
+    });
+
+    const scoreInput = el("input", {
+      class: "abc-gui-input abc-gui-input-small",
+      value: model.score,
+      placeholder: "_B, _E, _b, _e",
+      dataset: { abcGuiFocusKey: "info-V-score" }
+    }) as HTMLInputElement;
+    scoreInput.addEventListener("input", () => {
+      model.score = scoreInput.value;
+      commit();
+    });
+
+    const extrasInput = el("input", {
+      class: "abc-gui-input abc-gui-input-flex",
+      value: model.extras.join(" "),
+      placeholder: "other V: params",
+      dataset: { abcGuiFocusKey: "info-V-extra" }
+    }) as HTMLInputElement;
+    extrasInput.addEventListener("input", () => {
+      model.extras = tokenize(extrasInput.value);
+      commit();
+    });
+
+    const gchordsCheckbox = el("input", {
+      type: "checkbox",
+      checked: model.suppressChords
+    }) as HTMLInputElement;
+    gchordsCheckbox.addEventListener("change", () => {
+      model.suppressChords = gchordsCheckbox.checked;
+      commit();
+    });
+
+    wrap.append(
+      row(el("span", { class: "abc-gui-label" }, ["Voice"]), idInput),
+      row(el("span", { class: "abc-gui-label" }, ["Name"]), nameInput),
+      row(el("span", { class: "abc-gui-label" }, ["Short"]), subnameInput),
+      row(el("span", { class: "abc-gui-label" }, ["Clef"]), clefInput, middleInput),
+      row(el("span", { class: "abc-gui-label" }, ["Stem"]), stemSel),
+      row(el("span", { class: "abc-gui-label" }, ["Transpose"]), transposeInput, octaveInput),
+      row(el("span", { class: "abc-gui-label" }, ["Staff"]), staffLinesInput, staffScaleInput),
+      row(el("span", { class: "abc-gui-label" }, ["Scale"]), scaleInput, scoreInput),
+      row(el("span", { class: "abc-gui-label" }, ["Chords"]), gchordsCheckbox),
+      row(el("span", { class: "abc-gui-label" }, ["Extra"]), extrasInput)
+    );
+    return wrap;
   }
 
   // ---- Raw fallback ------------------------------------------------------
@@ -2106,6 +2471,58 @@ export class PropertyPanel {
       }
     });
     row.append(input);
+    return row;
+  }
+
+  private buildInfoFieldRawEditor(
+    parsed: ParsedInfoField,
+    raw: string,
+    start: number,
+    end: number,
+    inline: boolean,
+    readOnly = false
+  ): HTMLElement {
+    const row = el("div", { class: "abc-gui-row abc-gui-raw" });
+    row.append(
+      el("span", { class: "abc-gui-label" }, [this.strings.panel.section.rawElement])
+    );
+
+    const trailingBreaks = raw.match(/(?:\r?\n)+$/)?.[0] ?? "";
+    const prefix = inline ? `[${parsed.name}:` : `${parsed.name}:`;
+    const suffix = inline ? "]" : "";
+
+    row.append(el("span", { class: "abc-gui-readout" }, [prefix]));
+    const input = el("input", {
+      class: "abc-gui-input abc-gui-input-flex abc-gui-raw-input",
+      type: "text",
+      value: parsed.value,
+      disabled: readOnly
+    }) as HTMLInputElement;
+    if (readOnly) {
+      input.title = "Locked by host application";
+    }
+    row.append(input);
+    if (suffix) {
+      row.append(el("span", { class: "abc-gui-readout" }, [suffix]));
+    }
+
+    let lastCommitted: string | null = null;
+    const commit = () => {
+      const field = inline
+        ? writeInlineField({ name: parsed.name, value: input.value })
+        : writeInfoLine({ name: parsed.name, value: input.value });
+      const next = field + trailingBreaks;
+      if (next === raw || next === lastCommitted) return;
+      lastCommitted = next;
+      this.applyRange(start, end, next);
+    };
+    input.addEventListener("blur", commit);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        commit();
+      }
+    });
     return row;
   }
 
