@@ -92,7 +92,6 @@ export class PropertyPanel {
   private chordActiveTab = 0;
   private chordEditor: ChordEditorCallback | null = null;
   private chordVerifier: ChordVerifierCallback | null = null;
-  private decoExpanded = false;
   /** When true, display the letter "B" as "H" (German note-naming
    *  convention), matching abcjs's `germanAlphabet` render option.
    *  Only affects UI labels — underlying ABC source stays in A–G. */
@@ -203,7 +202,6 @@ export class PropertyPanel {
       )
     ) {
       this.chordActiveTab = 0;
-      this.decoExpanded = false;
     }
     this.current = sel;
     this.render();
@@ -1640,11 +1638,8 @@ export class PropertyPanel {
     wrap.append(addRow);
 
     // Decorations ------------------------------------------------------
-    // Show the six most commonly used decorations on the primary row. A
-    // trailing "…" button reveals the rest in additional rows below.
-    // Click on a highlighted button removes that decoration; click on an
-    // inactive one adds it. The active styling conveys "click to remove"
-    // — no extra ✕ glyph.
+    // Always show the full decoration set. CSS controls the layout:
+    // wide mode uses a fixed 7-column grid, narrow mode wraps naturally.
     const renderDeco = (d: typeof DECORATIONS[number]): HTMLElement => {
       const isActive = prefix.decorations.includes(d.name);
       const locTitle = (this.strings.decorations as Record<string, string>)[d.name] ?? d.title;
@@ -1664,46 +1659,13 @@ export class PropertyPanel {
         { active: isActive }
       );
     };
-    const common = DECORATIONS.filter((d) => DECO_COMMON.includes(d.name))
-      .sort((a, b) => DECO_COMMON.indexOf(a.name) - DECO_COMMON.indexOf(b.name));
-    const rare = DECORATIONS.filter((d) => !DECO_COMMON.includes(d.name));
     const decoRow = el("div", { class: "abc-gui-row abc-gui-deco-row" }, [
       el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.decorations])
     ]);
-    for (const d of common) decoRow.append(renderDeco(d));
-    // Promote any active rare decoration to the primary row so users can
-    // always see/remove what's attached without expanding.
-    const activeRare = rare.filter((d) => prefix.decorations.includes(d.name));
-    for (const d of activeRare) decoRow.append(renderDeco(d));
-    const hiddenRare = rare.filter((d) => !prefix.decorations.includes(d.name));
-    if (hiddenRare.length > 0) {
-      decoRow.append(
-        button(
-          "…",
-          this.decoExpanded
-            ? this.strings.panel.hints.collapseDecorations
-            : this.strings.panel.hints.expandDecorations,
-          () => {
-            this.decoExpanded = !this.decoExpanded;
-            this.render();
-          },
-          { active: this.decoExpanded }
-        )
-      );
-    }
+    const decoButtons = el("div", { class: "abc-gui-deco-buttons" });
+    for (const d of DECORATIONS) decoButtons.append(renderDeco(d));
+    decoRow.append(decoButtons);
     wrap.append(decoRow);
-    if (this.decoExpanded && hiddenRare.length > 0) {
-      // Show all remaining decorations in as many rows as needed.
-      // We keep 7 buttons per row to match the panel width target.
-      const perRow = 7;
-      for (let i = 0; i < hiddenRare.length; i += perRow) {
-        const extraRow = el("div", { class: "abc-gui-row abc-gui-deco-row abc-gui-deco-extra" }, [
-          el("span", { class: "abc-gui-label" }, [])
-        ]);
-        for (const d of hiddenRare.slice(i, i + perRow)) extraRow.append(renderDeco(d));
-        wrap.append(extraRow);
-      }
-    }
     // Any non-canonical decorations (custom !names!) appear after the
     // standard set so the user can still remove them; click to remove.
     const customRow = el("div", { class: "abc-gui-row abc-gui-deco-row" }, [
@@ -2208,20 +2170,6 @@ const LENGTH_SHORTCUT_FRACTIONS: { num: number; den: number }[] = [
   { num: 1, den: 4 },
   { num: 1, den: 8 },
   { num: 1, den: 16 }
-];
-
-/**
- * Decoration names considered "commonly used" — displayed on the primary
- * decorations row. All other decorations are hidden behind a "…" expander.
- * Order reflects rough usage frequency in folk / classical ABC sources.
- */
-const DECO_COMMON: string[] = [
-  "staccato",
-  "accent",
-  "tenuto",
-  "fermata",
-  "trill",
-  "marcato"
 ];
 
 function transposeParsedNote(note: ParsedNote, semitoneDelta: number): ParsedNote {

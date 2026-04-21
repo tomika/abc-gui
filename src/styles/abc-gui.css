@@ -297,6 +297,11 @@
     flex-wrap: wrap;
     gap: 4px;
   }
+  .abc-gui-deco-buttons {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
 }
 @media (max-width: 780px) {
   .abc-gui-root {
@@ -340,6 +345,11 @@
     flex-wrap: wrap;
     gap: 4px;
   }
+  .abc-gui-deco-buttons {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
 }
 
 .abc-gui-panel-empty {
@@ -376,9 +386,26 @@
   min-width: 0;
 }
 
+/* Numeric formula rows (L: × n/d = …) should align to input centers,
+ * unlike wrapped text rows that are intentionally top-aligned. */
+.abc-gui-unitlen {
+  align-items: center;
+}
+
+.abc-gui-unitlen .abc-gui-label {
+  align-self: center;
+}
+
 .abc-gui-bar-buttons {
   display: grid;
   grid-template-columns: repeat(4, minmax(var(--abc-control-size), max-content));
+  gap: 4px;
+  min-width: 0;
+}
+
+.abc-gui-deco-buttons {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(var(--abc-control-size), max-content));
   gap: 4px;
   min-width: 0;
 }
@@ -509,7 +536,6 @@
 .abc-gui-dark .abc-gui-chord-note-remove:hover { background: #3b2626; }
 
 .abc-gui-deco-row { flex-wrap: nowrap; overflow: visible; }
-.abc-gui-deco-row.abc-gui-deco-extra { margin-top: 0; }
 .abc-gui-binding-row { flex-wrap: nowrap; }
 
 @container (max-width: 600px) {
