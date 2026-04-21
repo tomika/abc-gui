@@ -1773,7 +1773,17 @@ export class PropertyPanel {
     let tonic = (m[1] || "C").toUpperCase();
     let acc = m[2] || "";
     let mode = (m[3] || "maj").toLowerCase();
-    const modes = ["maj", "min", "m", "dor", "phr", "lyd", "mix", "aeo", "loc"];
+    const isMinorAlias = mode === "m" || mode === "min" || mode === "aeo";
+    if (isMinorAlias) mode = "min";
+    const modes: Array<{ value: string; label: string }> = [
+      { value: "maj", label: "maj" },
+      { value: "min", label: "m(in)/aeo" },
+      { value: "dor", label: "dor" },
+      { value: "phr", label: "phr" },
+      { value: "lyd", label: "lyd" },
+      { value: "mix", label: "mix" },
+      { value: "loc", label: "loc" }
+    ];
 
     // Pull out clef=... but keep all other modifiers untouched.
     const remainingMods: string[] = [];
@@ -1804,26 +1814,46 @@ export class PropertyPanel {
       if (L === tonic) o.selected = true;
       tonicSel.append(o);
     }
+    const accSel = el("select", { class: "abc-gui-input" }) as HTMLSelectElement;
+    const allowedAccidentalsForTonic = (letter: string): Array<"" | "#" | "b"> => {
+      const upper = letter.toUpperCase();
+      if (upper === "E" || upper === "B") return ["", "b"];
+      if (upper === "C" || upper === "F") return ["", "#"];
+      return ["", "#", "b"];
+    };
+    const accidentalLabels: Record<"" | "#" | "b", string> = {
+      "": "♮",
+      "#": "♯",
+      "b": "♭"
+    };
+    const refreshAccidentalOptions = () => {
+      clear(accSel);
+      const allowed = allowedAccidentalsForTonic(tonic);
+      if (!allowed.includes(acc as "" | "#" | "b")) {
+        acc = "";
+      }
+      for (const val of allowed) {
+        const o = el("option", { value: val }, [accidentalLabels[val]]) as HTMLOptionElement;
+        if (val === acc) o.selected = true;
+        accSel.append(o);
+      }
+    };
+    refreshAccidentalOptions();
     tonicSel.addEventListener("change", () => {
       tonic = tonicSel.value;
+      refreshAccidentalOptions();
       fire();
     });
-
-    const accSel = el("select", { class: "abc-gui-input" }) as HTMLSelectElement;
-    for (const [val, label] of [["", "♮"], ["#", "♯"], ["b", "♭"]] as const) {
-      const o = el("option", { value: val }, [label]) as HTMLOptionElement;
-      if (val === acc) o.selected = true;
-      accSel.append(o);
-    }
     accSel.addEventListener("change", () => {
       acc = accSel.value;
       fire();
-    });
+    }
+    );
 
     const modeSel = el("select", { class: "abc-gui-input" }) as HTMLSelectElement;
     for (const md of modes) {
-      const o = el("option", { value: md }, [md]) as HTMLOptionElement;
-      if (md === mode) o.selected = true;
+      const o = el("option", { value: md.value }, [md.label]) as HTMLOptionElement;
+      if (md.value === mode) o.selected = true;
       modeSel.append(o);
     }
     modeSel.addEventListener("change", () => {
@@ -2011,15 +2041,24 @@ export class PropertyPanel {
     row.append(
       el("span", { class: "abc-gui-label" }, [this.strings.panel.section.rawElement])
     );
+    // Keep trailing line ending(s) outside the editable textbox value so
+    // committing a single-line edit can't accidentally consume separators
+    // between ABC lines.
+    const trailingBreaks = raw.match(/(?:\r?\n)+$/)?.[0] ?? "";
+    const editableRaw = trailingBreaks
+      ? raw.slice(0, raw.length - trailingBreaks.length)
+      : raw;
     const input = el("input", {
       class: "abc-gui-input abc-gui-input-flex abc-gui-raw-input",
       type: "text",
-      value: raw
+      value: editableRaw
     }) as HTMLInputElement;
+    let lastCommitted: string | null = null;
     const commit = () => {
-      if (input.value !== raw) {
-        this.applyRange(start, end, input.value);
-      }
+      const next = input.value + trailingBreaks;
+      if (next === raw || next === lastCommitted) return;
+      lastCommitted = next;
+      this.applyRange(start, end, next);
     };
     input.addEventListener("blur", commit);
     input.addEventListener("keydown", (e) => {
