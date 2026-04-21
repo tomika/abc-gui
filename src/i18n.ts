@@ -33,6 +33,7 @@ export interface Strings {
       rest: string;
       restLength: string;
       attached: string;
+      barEndingGuide: string;
       rawElement: string;
     };
     labels: {
@@ -64,6 +65,7 @@ export interface Strings {
       slurStart: { add: string; remove: string };
       slurEnd: { add: string; remove: string };
       tie: { add: string; remove: string };
+      barEndingNumbering: string;
       remove: string;
       removeX: (name: string) => string;
       removeGraceNotes: string;
@@ -220,6 +222,7 @@ export const en: Strings = {
       rest: "Rest",
       restLength: "Rest length",
       attached: "Attached",
+      barEndingGuide: "Repeat Endings",
       rawElement: "ABC"
     },
     labels: {
@@ -264,6 +267,12 @@ export const en: Strings = {
         add: "tie to next note (shortcut key: '-')",
         remove: "remove tie to next note (shortcut key: '-')"
       },
+      barEndingNumbering:
+        "Use ending numbers after a bar to define repeat branches.\n" +
+        "Write [1 for first ending, [2 for second ending, etc.\n" +
+        "You can target multiple endings with [1,2.\n" +
+        "You can define ranges with [1-3.\n" +
+        "abcjs accepts these markers after bar lines (optional '[' is allowed).",
       remove: "remove",
       removeX: (name) => `remove ${name}`,
       removeGraceNotes: "remove grace notes",
@@ -441,6 +450,7 @@ export const hu: Strings = {
       rest: "Szünet",
       restLength: "Szünet hossza",
       attached: "Csatolt",
+      barEndingGuide: "Ismétlési zárások",
       rawElement: "ABC"
     },
     labels: {
@@ -486,6 +496,12 @@ export const hu: Strings = {
         remove:
           "hangkötés eltávolítása a következő hangról (gyorsbillentyű: '-')"
       },
+      barEndingNumbering:
+        "A vonal után írt sorszámokkal ismétlési zárásokat jelölhetsz.\n" +
+        "Az első zárás jelölése: [1, a másodiké: [2.\n" +
+        "Több zárást együtt is megadhatsz: [1,2.\n" +
+        "Tartomány is használható: [1-3.\n" +
+        "Az abcjs ezeket a jelöléseket a vonal után értelmezi (a '[' opcionális).",
       remove: "eltávolítás",
       removeX: (name) => `${name} eltávolítása`,
       removeGraceNotes: "előkék eltávolítása",

@@ -469,6 +469,17 @@ export class PropertyPanel {
         rawEditorEnd
       )
     );
+    if (kind === "bar") {
+      this.host.append(
+        this.separator(),
+        el("div", { class: "abc-gui-section-title" }, [
+          this.strings.panel.section.barEndingGuide
+        ]),
+        el("div", { class: "abc-gui-help-text" }, [
+          this.strings.panel.hints.barEndingNumbering
+        ])
+      );
+    }
     if (restoreFocusKey) {
       const restoreTarget = this.host.querySelector<HTMLInputElement>(
         `input[data-abc-gui-focus-key="${restoreFocusKey}"]`
@@ -1037,28 +1048,23 @@ export class PropertyPanel {
     // Strip trailing volta numbers (e.g. |:1,2,3 → |:) for button matching.
     const barLine = current.replace(/[0-9,\-]+$/, "");
 
-    const wrap = el("div");
-    const perRow = 4;
-    for (let i = 0; i < BAR_TYPES.length; i += perRow) {
-      const row = el("div", { class: "abc-gui-row abc-gui-bar-row" }, [
-        el("span", { class: "abc-gui-label" }, [
-          i === 0 ? this.strings.panel.labels.barType : ""
-        ])
-      ]);
-      for (const b of BAR_TYPES.slice(i, i + perRow)) {
-        const t = this.strings.barTypes[b.value as keyof typeof this.strings.barTypes] ?? b.title;
-        row.append(
-          button(
-            b.label,
-            t,
-            () => this.applyRange(start, end, b.value),
-            { active: barLine === b.value }
-          )
-        );
-      }
-      wrap.append(row);
+    const row = el("div", { class: "abc-gui-row abc-gui-bar-row" }, [
+      el("span", { class: "abc-gui-label" }, [this.strings.panel.labels.barType])
+    ]);
+    const buttons = el("div", { class: "abc-gui-bar-buttons" });
+    for (const b of BAR_TYPES) {
+      const t = this.strings.barTypes[b.value as keyof typeof this.strings.barTypes] ?? b.title;
+      buttons.append(
+        button(
+          b.label,
+          t,
+          () => this.applyRange(start, end, b.value),
+          { active: barLine === b.value }
+        )
+      );
     }
-    this.host.append(wrap);
+    row.append(buttons);
+    this.host.append(row);
   }
 
   private renderInfoFieldEditor(

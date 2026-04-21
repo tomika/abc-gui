@@ -292,6 +292,11 @@
     position: static !important;
     height: auto !important;
   }
+  .abc-gui-bar-buttons {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
 }
 @media (max-width: 780px) {
   .abc-gui-root {
@@ -330,6 +335,11 @@
     position: static !important;
     height: auto !important;
   }
+  .abc-gui-bar-buttons {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
 }
 
 .abc-gui-panel-empty {
@@ -360,9 +370,16 @@
 .abc-gui-row {
   display: flex;
   flex-wrap: nowrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 4px;
   margin: 4px 0;
+  min-width: 0;
+}
+
+.abc-gui-bar-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(var(--abc-control-size), max-content));
+  gap: 4px;
   min-width: 0;
 }
 
@@ -373,9 +390,22 @@
 }
 
 .abc-gui-label {
-  min-width: 70px;
+  flex: 0 0 var(--abc-label-width, 92px);
+  min-width: 0;
   color: var(--abc-text-subtle);
   font-size: 13px;
+  align-self: flex-start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+}
+
+.abc-gui-help-text {
+  color: var(--abc-text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: pre-line;
+  margin: 2px 0 8px;
 }
 
 .abc-gui-readout {
