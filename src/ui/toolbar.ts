@@ -63,6 +63,8 @@ interface InsertSpec {
   defaultBefore?: boolean;
   /** keyboard keys that trigger this insertion. */
   hotkeys?: string[];
+  /** false -> keep spec in code, but hide it from toolbar and shortcuts. */
+  showInToolbar?: boolean;
 }
 
 export class Toolbar {
@@ -160,7 +162,10 @@ export class Toolbar {
         title: s.toolbar.header.newTune,
         snippet: "X:1\nT:Untitled\nM:4/4\nL:1/8\nK:C",
         infoField: true,
-        hotkeys: ["X"]
+        hotkeys: ["X"],
+        // Multi-tune rendering/editing is currently not exposed in the UI.
+        // Keep the implementation, but hide this entry for now.
+        showInToolbar: false
       },
       { glyph: "T:", title: s.toolbar.header.title, snippet: "T:Title", infoField: true, hotkeys: ["T"] },
       { glyph: "C:", title: s.toolbar.header.composer, snippet: "C:Composer", infoField: true, hotkeys: ["C"] },
@@ -193,7 +198,9 @@ export class Toolbar {
   /** Trigger one of the insert/header actions via keyboard hotkey. */
   handleShortcut(key: string, shiftKey: boolean): boolean {
     const norm = key.length === 1 ? key.toUpperCase() : key;
-    const allSpecs = [...this.insertSpecs, ...this.headerSpecs];
+    const allSpecs = [...this.insertSpecs, ...this.headerSpecs].filter(
+      (s) => s.showInToolbar !== false
+    );
     const spec = allSpecs.find((s) => s.hotkeys?.includes(norm));
     if (!spec) return false;
     this.insert(spec, spec.defaultBefore ? !shiftKey : shiftKey);
@@ -276,6 +283,7 @@ export class Toolbar {
   private group(name: string, specs: ReadonlyArray<InsertSpec>): HTMLElement {
     const g = el("div", { class: "abc-gui-group", title: name });
     for (const spec of specs) {
+      if (spec.showInToolbar === false) continue;
       g.append(
         button(spec.glyph, spec.title, (ev) => this.insert(spec, spec.defaultBefore ? !ev.shiftKey : ev.shiftKey))
       );
