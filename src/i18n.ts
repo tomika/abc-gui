@@ -23,6 +23,17 @@ export interface Strings {
       bar: string;
       infoLine: string;
       inlineField: string;
+      infoFieldNames: {
+        X: string;
+        T: string;
+        C: string;
+        R: string;
+        K: string;
+        M: string;
+        L: string;
+        Q: string;
+        V: string;
+      };
       other: string;
     };
     section: {
@@ -212,6 +223,17 @@ export const en: Strings = {
       bar: "∣ Bar line",
       infoLine: "≡ Info field",
       inlineField: "[≡] Inline field",
+      infoFieldNames: {
+        X: "Reference number",
+        T: "Title",
+        C: "Composer",
+        R: "Rhythm",
+        K: "Key",
+        M: "Meter",
+        L: "Unit length",
+        Q: "Tempo",
+        V: "Voice"
+      },
       other: "• Element"
     },
     section: {
@@ -440,6 +462,17 @@ export const hu: Strings = {
       bar: "∣ Ütemvonal",
       infoLine: "≡ Fejlécmező",
       inlineField: "[≡] Beágyazott mező",
+      infoFieldNames: {
+        X: "Hivatkozási szám",
+        T: "Cím",
+        C: "Szerző",
+        R: "Ritmus",
+        K: "Hangnem",
+        M: "Ütemmutató",
+        L: "Egységhossz",
+        Q: "Tempó",
+        V: "Szólam"
+      },
       other: "• Elem"
     },
     section: {

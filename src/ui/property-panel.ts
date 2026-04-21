@@ -170,6 +170,41 @@ export class PropertyPanel {
     }
   }
 
+  private infoFieldKindLabel(raw: string, inline: boolean): string {
+    const parsed = inline
+      ? readInlineField(raw.trim())
+      : readInfoLine(raw.trim());
+    if (!parsed) {
+      return inline
+        ? this.strings.panel.kind.inlineField
+        : this.strings.panel.kind.infoLine;
+    }
+
+    const h = this.strings.panel.kind.infoFieldNames;
+    const mapped = (() => {
+      switch (parsed.name) {
+        case "T": return h.T;
+        case "C": return h.C;
+        case "R": return h.R;
+        case "K": return h.K;
+        case "M": return h.M;
+        case "L": return h.L;
+        case "Q": return h.Q;
+        case "V": return h.V;
+        case "X": return h.X;
+        default: return null;
+      }
+    })();
+
+    if (!mapped) {
+      return inline
+        ? `${this.strings.panel.kind.inlineField} (${parsed.name}:)`
+        : `${this.strings.panel.kind.infoLine} (${parsed.name}:)`;
+    }
+
+    return inline ? `[≡] ${mapped}` : `≡ ${mapped}`;
+  }
+
   /** Translate a canonical length preset (identified by its English `title`
    *  from `ABSOLUTE_LENGTH_PRESETS`) into the active locale. */
   private lengthTitle(p: { title: string }): string {
@@ -394,8 +429,15 @@ export class PropertyPanel {
     }
     headerRight.append(el("span", { class: "abc-gui-range" }, [`${startChar}…${endChar}`]));
 
+    const headerTitle =
+      kind === "info-line"
+        ? this.infoFieldKindLabel(core, /*inline*/ false)
+        : kind === "inline-field"
+          ? this.infoFieldKindLabel(core, /*inline*/ true)
+          : this.kindLabel(kind);
+
     const header = el("div", { class: "abc-gui-panel-header" }, [
-      el("span", { class: "abc-gui-kind" }, [this.kindLabel(kind)]),
+      el("span", { class: "abc-gui-kind" }, [headerTitle]),
       headerRight
     ]);
     this.host.append(header);
