@@ -92,6 +92,7 @@ export class PropertyPanel {
   private chordActiveTab = 0;
   private chordEditor: ChordEditorCallback | null = null;
   private chordVerifier: ChordVerifierCallback | null = null;
+  private isInfoFieldEditable: (name: string) => boolean;
   /** When true, display the letter "B" as "H" (German note-naming
    *  convention), matching abcjs's `germanAlphabet` render option.
    *  Only affects UI labels — underlying ABC source stays in A–G. */
@@ -102,13 +103,15 @@ export class PropertyPanel {
     doc: AbcDocument,
     strings: Strings,
     chordEditor: ChordEditorCallback | null = null,
-    chordVerifier: ChordVerifierCallback | null = null
+    chordVerifier: ChordVerifierCallback | null = null,
+    opts: { isInfoFieldEditable?: (name: string) => boolean } = {}
   ) {
     this.host = host;
     this.doc = doc;
     this.strings = strings;
     this.chordEditor = chordEditor;
     this.chordVerifier = chordVerifier;
+    this.isInfoFieldEditable = opts.isInfoFieldEditable ?? (() => true);
     this.host.classList.add("abc-gui-panel");
     this.render();
   }
@@ -203,6 +206,10 @@ export class PropertyPanel {
     }
 
     return inline ? `[≡] ${mapped}` : `≡ ${mapped}`;
+  }
+
+  private parseInfoField(raw: string, inline: boolean): ParsedInfoField | null {
+    return inline ? readInlineField(raw.trim()) : readInfoLine(raw.trim());
   }
 
   /** Translate a canonical length preset (identified by its English `title`
@@ -499,6 +506,13 @@ export class PropertyPanel {
       );
     }
 
+    const rawReadOnly =
+      (kind === "info-line" || kind === "inline-field") &&
+      (() => {
+        const parsed = this.parseInfoField(core, kind === "inline-field");
+        return !!parsed && !this.isInfoFieldEditable(parsed.name);
+      })();
+
     // Raw fallback — includes the currently-active wrapper markers around
     // note/chord/rest (triplet/slur/tie) so the field reflects what the
     // dedicated Group buttons just changed.
@@ -506,7 +520,8 @@ export class PropertyPanel {
       this.buildRawEditor(
         this.doc.slice(rawEditorStart, rawEditorEnd),
         rawEditorStart,
-        rawEditorEnd
+        rawEditorEnd,
+        rawReadOnly
       )
     );
     if (kind === "bar") {
@@ -1113,15 +1128,30 @@ export class PropertyPanel {
     end: number,
     inline: boolean
   ) {
-    const parsed = inline
-      ? readInlineField(raw.trim())
-      : readInfoLine(raw.trim());
+    const parsed = this.parseInfoField(raw, inline);
     if (!parsed) return;
     const write = (f: ParsedInfoField) =>
       inline ? writeInlineField(f) : writeInfoLine(f);
     const apply = (patch: Partial<ParsedInfoField>) => {
       this.applyRange(start, end, write({ ...parsed, ...patch }));
     };
+
+    if (!this.isInfoFieldEditable(parsed.name)) {
+      const input = el("input", {
+        class: "abc-gui-input abc-gui-input-flex",
+        value: parsed.value,
+        disabled: true
+      }) as HTMLInputElement;
+      this.host.append(
+        el("div", { class: "abc-gui-row" }, [
+          el("span", { class: "abc-gui-label" }, [
+            parsed.name + ":"
+          ]),
+          input
+        ])
+      );
+      return;
+    }
 
     // Dedicated editors for common fields.
     switch (parsed.name) {
@@ -2040,7 +2070,7 @@ export class PropertyPanel {
 
   // ---- Raw fallback ------------------------------------------------------
 
-  private buildRawEditor(raw: string, start: number, end: number): HTMLElement {
+  private buildRawEditor(raw: string, start: number, end: number, readOnly = false): HTMLElement {
     const row = el("div", { class: "abc-gui-row abc-gui-raw" });
     row.append(
       el("span", { class: "abc-gui-label" }, [this.strings.panel.section.rawElement])
@@ -2055,8 +2085,12 @@ export class PropertyPanel {
     const input = el("input", {
       class: "abc-gui-input abc-gui-input-flex abc-gui-raw-input",
       type: "text",
-      value: editableRaw
+      value: editableRaw,
+      disabled: readOnly
     }) as HTMLInputElement;
+    if (readOnly) {
+      input.title = "Locked by host application";
+    }
     let lastCommitted: string | null = null;
     const commit = () => {
       const next = input.value + trailingBreaks;

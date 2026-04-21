@@ -27,6 +27,10 @@ export interface ToolbarDeps {
    *  and so is also hidden. */
   isRawVisible: () => boolean;
   toggleRawVisible: () => void;
+  /** Show/hide the toolbar raw-pane switch (📝). */
+  showRawToggleButton?: boolean;
+  /** Per-header-field visibility gate for T/C/R/K/L/Q/V actions. */
+  isHeaderFieldEnabled?: (name: string) => boolean;
   onRawVisibilityChange: (cb: () => void) => void;
   /** MIDI playback. When `playSupported` is false the buttons are disabled. */
   playSupported: boolean;
@@ -65,6 +69,8 @@ interface InsertSpec {
   hotkeys?: string[];
   /** false -> keep spec in code, but hide it from toolbar and shortcuts. */
   showInToolbar?: boolean;
+  /** Header-field name for policy checks (T/C/R/K/L/Q/V/X). */
+  fieldName?: string;
 }
 
 export class Toolbar {
@@ -130,8 +136,14 @@ export class Toolbar {
     });
     this.toggleRawBtn = toggleRawBtn;
     const modeGroup = el("div", { class: "abc-gui-group", title: s.toolbar.groups.modes });
-    modeGroup.append(toggleRawBtn, rawSelectBtn);
+    if (this.deps.showRawToggleButton ?? true) {
+      modeGroup.append(toggleRawBtn);
+    }
+    modeGroup.append(rawSelectBtn);
     this.modeGroup = modeGroup;
+
+    const isHeaderEnabled = (name: string) =>
+      this.deps.isHeaderFieldEnabled ? this.deps.isHeaderFieldEnabled(name) : true;
 
     this.insertSpecs = [
       { glyph: "♪", title: s.toolbar.insert.note, snippet: "C", hotkeys: ["N"] },
@@ -162,19 +174,84 @@ export class Toolbar {
         title: s.toolbar.header.newTune,
         snippet: "X:1\nT:Untitled\nM:4/4\nL:1/8\nK:C",
         infoField: true,
+        fieldName: "X",
         hotkeys: ["X"],
         // Multi-tune rendering/editing is currently not exposed in the UI.
         // Keep the implementation, but hide this entry for now.
         showInToolbar: false
       },
-      { glyph: "T:", title: s.toolbar.header.title, snippet: "T:Title", infoField: true, hotkeys: ["T"] },
-      { glyph: "C:", title: s.toolbar.header.composer, snippet: "C:Composer", infoField: true, hotkeys: ["C"] },
-      { glyph: "R:", title: s.toolbar.header.rhythm, snippet: "R:Rhythm", infoField: true, hotkeys: ["R"] },
-      { glyph: "K:", title: s.toolbar.header.key, snippet: "K:C", infoField: true, hotkeys: ["K"] },
-      { glyph: "M:", title: s.toolbar.header.meter, snippet: "M:4/4", infoField: true, hotkeys: ["M"] },
-      { glyph: "L:", title: s.toolbar.header.unitLength, snippet: "L:1/8", infoField: true, hotkeys: ["L"] },
-      { glyph: "Q:", title: s.toolbar.header.tempo, snippet: "Q:1/4=120", infoField: true, hotkeys: ["Q"] },
-      { glyph: "V:", title: s.toolbar.header.voice, snippet: "V:1", infoField: true, hotkeys: ["V"] }
+      {
+        glyph: "T:",
+        title: s.toolbar.header.title,
+        snippet: "T:Title",
+        infoField: true,
+        fieldName: "T",
+        hotkeys: ["T"],
+        showInToolbar: isHeaderEnabled("T")
+      },
+      {
+        glyph: "C:",
+        title: s.toolbar.header.composer,
+        snippet: "C:Composer",
+        infoField: true,
+        fieldName: "C",
+        hotkeys: ["C"],
+        showInToolbar: isHeaderEnabled("C")
+      },
+      {
+        glyph: "R:",
+        title: s.toolbar.header.rhythm,
+        snippet: "R:Rhythm",
+        infoField: true,
+        fieldName: "R",
+        hotkeys: ["R"],
+        showInToolbar: isHeaderEnabled("R")
+      },
+      {
+        glyph: "K:",
+        title: s.toolbar.header.key,
+        snippet: "K:C",
+        infoField: true,
+        fieldName: "K",
+        hotkeys: ["K"],
+        showInToolbar: isHeaderEnabled("K")
+      },
+      {
+        glyph: "M:",
+        title: s.toolbar.header.meter,
+        snippet: "M:4/4",
+        infoField: true,
+        fieldName: "M",
+        hotkeys: ["M"],
+        showInToolbar: isHeaderEnabled("M")
+      },
+      {
+        glyph: "L:",
+        title: s.toolbar.header.unitLength,
+        snippet: "L:1/8",
+        infoField: true,
+        fieldName: "L",
+        hotkeys: ["L"],
+        showInToolbar: isHeaderEnabled("L")
+      },
+      {
+        glyph: "Q:",
+        title: s.toolbar.header.tempo,
+        snippet: "Q:1/4=120",
+        infoField: true,
+        fieldName: "Q",
+        hotkeys: ["Q"],
+        showInToolbar: isHeaderEnabled("Q")
+      },
+      {
+        glyph: "V:",
+        title: s.toolbar.header.voice,
+        snippet: "V:1",
+        infoField: true,
+        fieldName: "V",
+        hotkeys: ["V"],
+        showInToolbar: isHeaderEnabled("V")
+      }
     ];
 
     this.host.append(

@@ -1,6 +1,6 @@
 {
   "name": "abc-gui",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "description": "Fully-featured WYSIWYG editor for ABC music notation (framework-free TypeScript).",
   "keywords": [
     "abc",

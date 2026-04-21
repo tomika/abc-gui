@@ -12,6 +12,9 @@ import { el } from "./dom.js";
 import { LocaleId, Strings, resolveStrings } from "../i18n.js";
 import { AbcVisualParams } from "abcjs";
 
+export type HeaderFieldTag = "T" | "C" | "R" | "K" | "L" | "Q" | "V";
+export type RawViewMode = "toggle" | "visible" | "hidden";
+
 export interface AbcEditorOptions {
   value?: string;
   onChange?: (abc: string) => void;
@@ -25,6 +28,24 @@ export interface AbcEditorOptions {
   chordEditor?: (chord: string) => Promise<{ chordName: string; chordMidiValues: number[] }>;
   /** Optional stricter chord validation callback for chord-symbol annotations. */
   chordVerifier?: (chordName: string, germanAlphabet: boolean) => boolean;
+  /**
+   * Lock selected header/info fields (`T,C,R,K,L,Q,V`) across the UI:
+   * - hide their toolbar insertion buttons
+   * - make their property-page editor read-only
+   */
+  lockedHeaderFields?: HeaderFieldTag[];
+  /**
+   * Controls raw ABC textarea visibility behavior:
+   * - `toggle` (default): toolbar switch can show/hide
+   * - `visible`: always visible, cannot be toggled
+   * - `hidden`: always hidden, cannot be toggled
+   */
+  rawViewMode?: RawViewMode;
+  /**
+   * Show/hide the raw-pane visibility switch (`📝`) on the toolbar.
+   * Default: true. Ignored when `rawViewMode` is `visible` or `hidden`.
+   */
+  showRawToggleButton?: boolean;
   /**
    * Extra parameters forwarded verbatim to `abcjs.renderAbc`. Use this to
    * tweak engraving-level behavior that abcjs exposes but we don't wrap
@@ -68,6 +89,8 @@ export class AbcEditor {
   private rawSelectEnabled = true;
   private pendingFocusAfterRender = false;
   private strings: Strings;
+  private rawViewMode: RawViewMode;
+  private lockedHeaderFields: ReadonlySet<HeaderFieldTag>;
 
   constructor(container: HTMLElement, opts: AbcEditorOptions = {}) {
     this.container = container;
@@ -77,6 +100,8 @@ export class AbcEditor {
 
     this.strings = resolveStrings(opts.locale);
     this.applyTheme(opts.theme ?? "light");
+    this.rawViewMode = opts.rawViewMode ?? "toggle";
+    this.lockedHeaderFields = new Set((opts.lockedHeaderFields ?? []).map((n) => n.toUpperCase() as HeaderFieldTag));
 
     this.doc = new AbcDocument(opts.value ?? "");
 
@@ -97,7 +122,9 @@ export class AbcEditor {
     const contentHost = el("div", { class: "abc-gui-content-host" });
     contentHost.append(body, rawHost);
     this.container.append(toolbarHost, contentHost);
-    this.rawVisible = !opts.hideRawView;
+    if (this.rawViewMode === "visible") this.rawVisible = true;
+    else if (this.rawViewMode === "hidden") this.rawVisible = false;
+    else this.rawVisible = !opts.hideRawView;
     rawHost.hidden = !this.rawVisible;
     this.updateRawLayoutState();
 
@@ -107,7 +134,10 @@ export class AbcEditor {
       this.doc,
       this.strings,
       opts.chordEditor ?? null,
-      opts.chordVerifier ?? null
+      opts.chordVerifier ?? null,
+      {
+        isInfoFieldEditable: (name) => !this.lockedHeaderFields.has(name as HeaderFieldTag)
+      }
     );
     this.panel.setGermanAlphabet(!!opts.abcjsOptions?.germanAlphabet);
     this.player = new MidiPlayer();
@@ -121,7 +151,7 @@ export class AbcEditor {
         this.focusEditor(false);
       }
     });
-    if (!opts.hideRawView) {
+    if (this.rawVisible) {
       this.raw = new RawView(rawHost, this.doc);
       // Clicking / moving caret in the raw textarea selects the enclosing
       // ABC element (music note/bar/rest) or the header line it sits on.
@@ -137,6 +167,9 @@ export class AbcEditor {
       },
       isRawVisible: () => this.rawVisible,
       toggleRawVisible: () => this.toggleRawVisible(),
+      showRawToggleButton:
+        (opts.showRawToggleButton ?? true) && this.rawViewMode === "toggle",
+      isHeaderFieldEnabled: (name) => !this.lockedHeaderFields.has(name as HeaderFieldTag),
       onRawVisibilityChange: (cb) => this.rawVisibilityListeners.push(cb),
       playSupported: MidiPlayer.isSupported(),
       isPlaying: () => this.player.isPlaying(),
@@ -361,6 +394,7 @@ export class AbcEditor {
 
   /** Show/hide the raw-text pane. Constructs/destroys the RawView lazily. */
   private toggleRawVisible(): void {
+    if (this.rawViewMode !== "toggle") return;
     this.rawVisible = !this.rawVisible;
     if (this.rawHost) this.rawHost.hidden = !this.rawVisible;
     if (this.rawVisible && !this.raw && this.rawHost) {
