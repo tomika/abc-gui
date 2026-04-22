@@ -89,6 +89,60 @@
   flex-shrink: 0;
 }
 
+.abc-gui-status-host {
+  display: flex;
+  align-items: stretch;
+  padding: 0;
+  background: var(--abc-surface-2);
+  border-top: 1px solid var(--abc-border);
+  flex-shrink: 0;
+}
+
+.abc-gui-statusbar {
+  width: 100%;
+}
+
+.abc-gui-status-row {
+  display: flex;
+  gap: 0;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+}
+
+.abc-gui-status-group {
+  display: contents;
+}
+
+.abc-gui-status-item {
+  flex: 1 1 0;
+  min-width: 0;
+  height: var(--abc-control-size);
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 1;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--abc-border);
+  border-radius: 0;
+  color: var(--abc-text);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+.abc-gui-status-item:first-child {
+  border-left: 1px solid var(--abc-border);
+}
+
+.abc-gui-status-item:hover { background: var(--abc-btn-bg-hover); }
+.abc-gui-status-item:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
 .abc-gui-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -277,30 +331,28 @@
   }
   .abc-gui-score-host,
   .abc-gui-panel-host {
+    /* Two stacked panes must fit inside content-host including body
+     * vertical padding (8+8) and inter-pane gap (8): 24px total. */
     flex: 0 0 auto !important;
     width: auto !important;
     height: auto !important;
-    max-height: 50cqh;
+    max-height: calc((100cqh - 24px) / 2);
     overflow: auto !important;
   }
   .abc-gui-raw-host {
+    flex: 0 0 auto;
     width: auto;
-    max-height: 50cqh;
+    height: auto;
+    max-height: calc(50cqh - 8px);
     overflow: auto;
+  }
+  .abc-gui-raw-view-textarea {
+    height: auto;
+    max-height: 100%;
   }
   .abc-gui-score-host > svg {
     position: static !important;
     height: auto !important;
-  }
-  .abc-gui-bar-buttons {
-    display: flex !important;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-  .abc-gui-deco-buttons {
-    display: flex !important;
-    flex-wrap: wrap;
-    gap: 4px;
   }
 }
 @media (max-width: 780px) {
@@ -325,30 +377,28 @@
   }
   .abc-gui-score-host,
   .abc-gui-panel-host {
+    /* Two stacked panes must fit inside content-host including body
+     * vertical padding (8+8) and inter-pane gap (8): 24px total. */
     flex: 0 0 auto !important;
     width: auto !important;
     height: auto !important;
-    max-height: 50cqh;
+    max-height: calc((100cqh - 24px) / 2);
     overflow: auto !important;
   }
   .abc-gui-raw-host {
+    flex: 0 0 auto;
     width: auto;
-    max-height: 50cqh;
+    height: auto;
+    max-height: calc(50cqh - 8px);
     overflow: auto;
+  }
+  .abc-gui-raw-view-textarea {
+    height: auto;
+    max-height: 100%;
   }
   .abc-gui-score-host > svg {
     position: static !important;
     height: auto !important;
-  }
-  .abc-gui-bar-buttons {
-    display: flex !important;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-  .abc-gui-deco-buttons {
-    display: flex !important;
-    flex-wrap: wrap;
-    gap: 4px;
   }
 }
 
@@ -380,33 +430,9 @@
 .abc-gui-row {
   display: flex;
   flex-wrap: nowrap;
-  align-items: flex-start;
+  align-items: center;
   gap: 4px;
   margin: 4px 0;
-  min-width: 0;
-}
-
-/* Numeric formula rows (L: × n/d = …) should align to input centers,
- * unlike wrapped text rows that are intentionally top-aligned. */
-.abc-gui-unitlen {
-  align-items: center;
-}
-
-.abc-gui-unitlen .abc-gui-label {
-  align-self: center;
-}
-
-.abc-gui-bar-buttons {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(var(--abc-control-size), max-content));
-  gap: 4px;
-  min-width: 0;
-}
-
-.abc-gui-deco-buttons {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(var(--abc-control-size), max-content));
-  gap: 4px;
   min-width: 0;
 }
 
@@ -417,22 +443,9 @@
 }
 
 .abc-gui-label {
-  flex: 0 0 var(--abc-label-width, 92px);
-  min-width: 0;
+  min-width: 70px;
   color: var(--abc-text-subtle);
   font-size: 13px;
-  align-self: flex-start;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  line-height: 1.2;
-}
-
-.abc-gui-help-text {
-  color: var(--abc-text-muted);
-  font-size: 12px;
-  line-height: 1.35;
-  white-space: pre-line;
-  margin: 2px 0 8px;
 }
 
 .abc-gui-readout {
@@ -440,19 +453,6 @@
   min-width: 18px;
   text-align: center;
   font-family: ui-monospace, Menlo, monospace;
-}
-
-.abc-gui-row.abc-gui-raw {
-  align-items: center;
-}
-
-.abc-gui-row.abc-gui-raw .abc-gui-label,
-.abc-gui-row.abc-gui-raw .abc-gui-readout {
-  align-self: center;
-}
-
-.abc-gui-row.abc-gui-raw .abc-gui-readout {
-  line-height: var(--abc-control-size);
 }
 
 .abc-gui-muted {
@@ -549,32 +549,65 @@
 .abc-gui-dark .abc-gui-chord-note-remove:hover { background: #3b2626; }
 
 .abc-gui-deco-row { flex-wrap: nowrap; overflow: visible; }
+.abc-gui-deco-row.abc-gui-deco-extra { margin-top: 0; }
 .abc-gui-binding-row { flex-wrap: nowrap; }
 
 @container (max-width: 600px) {
   .abc-gui-toolbar-host { padding: 4px; gap: 4px; }
+  .abc-gui-status-host { padding: 0; }
   .abc-gui-group { padding: 2px; }
   .abc-gui-btn {
     min-width: var(--abc-control-size-compact);
     height: var(--abc-control-size-compact);
     padding: 0 4px;
   }
+  .abc-gui-status-item {
+    height: var(--abc-control-size-compact);
+    padding: 0 4px;
+  }
   .abc-gui-input { height: var(--abc-control-size-compact); }
   .abc-gui-row { gap: 6px; }
   .abc-gui-body { padding: 6px; gap: 6px; }
+  .abc-gui-score-host,
+  .abc-gui-panel-host {
+    flex-basis: auto !important;
+    height: auto !important;
+    max-height: calc((100cqh - 18px) / 2);
+  }
+  .abc-gui-raw-host {
+    flex-basis: auto;
+    height: auto;
+    max-height: calc(50cqh - 8px);
+  }
   .abc-gui-panel-host, .abc-gui-raw-host, .abc-gui-score-host { padding: 6px; }
 }
 @media (max-width: 600px) {
   .abc-gui-toolbar-host { padding: 4px; gap: 4px; }
+  .abc-gui-status-host { padding: 0; }
   .abc-gui-group { padding: 2px; }
   .abc-gui-btn {
     min-width: var(--abc-control-size-compact);
     height: var(--abc-control-size-compact);
     padding: 0 4px;
   }
+  .abc-gui-status-item {
+    height: var(--abc-control-size-compact);
+    padding: 0 4px;
+  }
   .abc-gui-input { height: var(--abc-control-size-compact); }
   .abc-gui-row { gap: 6px; }
   .abc-gui-body { padding: 6px; gap: 6px; }
+  .abc-gui-score-host,
+  .abc-gui-panel-host {
+    flex-basis: auto !important;
+    height: auto !important;
+    max-height: calc((100cqh - 18px) / 2);
+  }
+  .abc-gui-raw-host {
+    flex-basis: auto;
+    height: auto;
+    max-height: calc(50cqh - 8px);
+  }
   .abc-gui-panel-host, .abc-gui-raw-host, .abc-gui-score-host { padding: 6px; }
 }
 

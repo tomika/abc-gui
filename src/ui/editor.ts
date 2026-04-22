@@ -7,6 +7,7 @@ import { ScoreView, SelectionEvent } from "../render/score-view.js";
 import { MidiPlayer } from "../render/midi-player.js";
 import { PropertyPanel, Selection } from "./property-panel.js";
 import { Toolbar } from "./toolbar.js";
+import { StatusBar } from "./status-bar.js";
 import { RawView } from "./raw-view.js";
 import { el } from "./dom.js";
 import { LocaleId, Strings, resolveStrings } from "../i18n.js";
@@ -74,6 +75,7 @@ export class AbcEditor {
   private rawHost: HTMLElement | null = null;
   private rawVisible = false;
   private rawVisibilityListeners: (() => void)[] = [];
+  private status: StatusBar;
   private currentSelection: Selection | null = null;
   /** abcjs CSS classes for the currently selected SVG group (when known).
    *  Cached so we can re-highlight the same element after a re-render
@@ -110,6 +112,7 @@ export class AbcEditor {
     const scoreHost = el("div", { class: "abc-gui-score-host" });
     const panelHost = el("div", { class: "abc-gui-panel-host" });
     const rawHost = el("div", { class: "abc-gui-raw-host" });
+    const statusHost = el("div", { class: "abc-gui-status-host" });
     this.rawHost = rawHost;
 
     body.append(scoreHost, panelHost);
@@ -121,7 +124,7 @@ export class AbcEditor {
     // mode so the toolbar is always visible.
     const contentHost = el("div", { class: "abc-gui-content-host" });
     contentHost.append(body, rawHost);
-    this.container.append(toolbarHost, contentHost);
+    this.container.append(toolbarHost, contentHost, statusHost);
     if (this.rawViewMode === "visible") this.rawVisible = true;
     else if (this.rawViewMode === "hidden") this.rawVisible = false;
     else this.rawVisible = !opts.hideRawView;
@@ -179,6 +182,11 @@ export class AbcEditor {
       onSelectionChange: (cb) => this.selectionListeners.push(cb),
       strings: this.strings
     });
+    this.status = new StatusBar(statusHost, {
+      doc: this.doc,
+      getSelection: () => this.currentSelection,
+      setSelection: (s) => this.select(s)
+    });
 
     this.score.onSelect((ev) => this.handleScoreClick(ev));
 
@@ -211,6 +219,7 @@ export class AbcEditor {
           opts.onChange!(this.doc.value);
         }, 50);
       }
+      this.status.refresh();
     });
 
     // Keyboard shortcuts: navigation + editing actions while focus is inside
@@ -342,6 +351,7 @@ export class AbcEditor {
     this.currentClasses = null;
     this.panel.setSelection(null);
     this.score.setSelected(null);
+    this.status.refresh();
   }
 
   destroy(): void {
@@ -583,6 +593,7 @@ export class AbcEditor {
     this.currentClasses = sel ? classes : null;
     this.score.setSelected(sel, classes);
     this.panel.setSelection(sel);
+    this.status.refresh();
     if (this.raw && sel) {
       this.raw.highlightRange(sel.startChar, sel.endChar);
     }
