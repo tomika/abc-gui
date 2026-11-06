@@ -1,8 +1,8 @@
 import abcjs from "abcjs";
-import type { AbcVisualParams } from "abcjs";
 import type { AbcDocument } from "../model/document.js";
+import type { HostHeaderOptions } from "../render/score-view.js";
 import { en, type HeaderOptionsStrings, type Strings } from "../i18n.js";
-import { parseOptionsJson } from "../parser/source.js";
+import { parseOptionsJson, sameOptions } from "../parser/source.js";
 import { button, el } from "./dom.js";
 
 interface OptionField {
@@ -38,9 +38,28 @@ const FIELDS: OptionField[] = [
   { key: "paddingbottom", group: "appearance", type: "number", min: 0, step: 1 }
 ];
 
+const NO_HOST_OPTIONS: HostHeaderOptions = { defaults: {}, locked: {} };
+
 let nextDialogId = 0;
 
-/** A draft form: only Apply changes the source; Cancel and Escape discard it. */
+function has(options: Readonly<Record<string, unknown>>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(options, key);
+}
+
+/**
+ * Dialog texts with English fallbacks, so translations written before a key
+ * existed (such as `lockedValue`) keep working.
+ */
+export function dialogStrings(strings: Strings): Required<HeaderOptionsStrings> {
+  const english = en.headerOptions as Required<HeaderOptionsStrings>;
+  const custom = strings.headerOptions;
+  return { ...english, ...custom, lockedValue: custom?.lockedValue ?? english.lockedValue };
+}
+
+/**
+ * A draft form: only Apply changes the source; Cancel and Escape discard it.
+ * Values the host fixes are shown read-only and Apply never changes them.
+ */
 export class HeaderOptionsDialog {
   private dialog: HTMLDialogElement;
   private form!: HTMLFormElement;
@@ -48,23 +67,25 @@ export class HeaderOptionsDialog {
   private advanced!: HTMLDetailsElement;
   private error!: HTMLElement;
   private controls = new Map<string, HTMLInputElement | HTMLSelectElement>();
-  private sliders = new Map<string, { input: HTMLInputElement; defaultValue: number }>();
-  private overrideHints = new Map<string, HTMLElement>();
-  private overrides: Record<string, unknown> = {};
+  private sliders = new Map<string, { input: HTMLInputElement; field: OptionField }>();
+  private lockHints = new Map<string, HTMLElement>();
+  private host: HostHeaderOptions = NO_HOST_OPTIONS;
+  /** Document options when the dialog was opened. */
+  private original: Readonly<Record<string, unknown>> = {};
   private translations: Array<() => void> = [];
-  private errorKind: "json" | "value" | null = null;
+  private errorKind: "json" | "value" | "locked" | null = null;
   private errorKey = "";
   private built = false;
-  private strings: HeaderOptionsStrings;
+  private strings: Required<HeaderOptionsStrings>;
   private id = `abc-gui-options-${++nextDialogId}`;
 
   constructor(
     container: HTMLElement,
     private doc: AbcDocument,
     strings: Strings,
-    private getOverrides: () => AbcVisualParams = () => ({})
+    private getHostOptions: () => HostHeaderOptions = () => NO_HOST_OPTIONS
   ) {
-    this.strings = strings.headerOptions ?? en.headerOptions!;
+    this.strings = dialogStrings(strings);
     this.dialog = el("dialog", { class: "abc-gui-header-options" });
     this.dialog.setAttribute("aria-labelledby", `${this.id}-title`);
     this.dialog.setAttribute("aria-describedby", `${this.id}-description`);
@@ -76,9 +97,10 @@ export class HeaderOptionsDialog {
   open(): void {
     if (this.dialog.open) return;
     if (!this.built) this.build();
-    this.overrides = this.getOverrides() as Record<string, unknown>;
-    this.updateOverrides();
+    this.host = this.getHostOptions();
+    this.updateLocks();
     const source = this.doc.source();
+    this.original = source.options;
     this.json.value = source.headerText ?? "{}";
     for (const [key, control] of this.controls) {
       control.value = "";
@@ -89,11 +111,41 @@ export class HeaderOptionsDialog {
   }
 
   setStrings(strings: Strings): void {
-    this.strings = strings.headerOptions ?? en.headerOptions!;
+    this.strings = dialogStrings(strings);
     // Translate existing nodes in place: focus, partial numeric input, textarea
     // selection, details state and validation errors remain untouched.
     for (const update of this.translations) update();
     if (this.built) this.refreshError();
+  }
+
+  /**
+   * Follow host changes while the dialog is open: lock states, fixed values
+   * and defaults. The JSON draft and fields whose lock did not change keep
+   * what the user typed.
+   */
+  refreshHostOptions(): void {
+    if (!this.dialog.open) return;
+    const previous = this.host;
+    this.host = this.getHostOptions();
+    this.updateLocks();
+    let draft: Record<string, unknown> = {};
+    try {
+      draft = parseOptionsJson(this.json.value);
+    } catch {
+      // The JSON error is already shown; newly unlocked fields start empty.
+    }
+    for (const field of FIELDS) {
+      const wasLocked = has(previous.locked, field.key);
+      const isLocked = has(this.host.locked, field.key);
+      if (wasLocked !== isLocked || !sameOptions(previous.locked[field.key], this.host.locked[field.key])) {
+        this.setControlValue(field, isLocked ? this.host.locked[field.key] : draft[field.key]);
+      }
+      this.syncSlider(field.key);
+    }
+    // An error about an option whose lock just changed no longer applies.
+    if (this.errorKind !== "json" && has(previous.locked, this.errorKey) !== has(this.host.locked, this.errorKey)) {
+      this.clearError();
+    }
   }
 
   destroy(): void {
@@ -130,7 +182,7 @@ export class HeaderOptionsDialog {
     body.append(this.advanced, this.error);
 
     const reset = button("", "", () => {
-      this.json.value = "{}";
+      this.json.value = this.lockedDraft();
       this.populateFields();
     });
     const cancel = button("", "", () => this.dialog.close());
@@ -145,9 +197,16 @@ export class HeaderOptionsDialog {
       event.preventDefault();
       const options = this.readOptions();
       if (!options) return;
+      // The document keeps whatever it had for fixed options; the host value
+      // applies regardless, so the draft must not change them.
+      const changed = Object.keys(this.host.locked).find((key) => !sameOptions(options[key], this.original[key]));
+      if (changed !== undefined) {
+        this.showError("locked", changed);
+        return;
+      }
       for (const field of FIELDS) {
         const value = options[field.key];
-        if (value === undefined) continue;
+        if (value === undefined || has(this.host.locked, field.key)) continue;
         const valid = field.type === "boolean" ? typeof value === "boolean"
           : typeof value === "number" && Number.isFinite(value)
             && (field.min === undefined || value >= field.min)
@@ -171,7 +230,7 @@ export class HeaderOptionsDialog {
     if (field.type === "boolean" || field.type === "instrument") {
       const select = el("select");
       const inherit = el("option", { value: "" });
-      this.translations.push(() => { inherit.textContent = this.strings.inherit; });
+      this.translations.push(() => { inherit.textContent = this.inheritText(field); });
       select.append(inherit);
       if (field.type === "boolean") {
         const yes = el("option", { value: "true" });
@@ -195,7 +254,8 @@ export class HeaderOptionsDialog {
       });
       const input = control;
       this.translations.push(() => {
-        input.placeholder = field.slider ? "—" : field.placeholder ?? this.strings.inherit;
+        input.placeholder = has(this.host.defaults, field.key) ? this.formatValue(field, this.host.defaults[field.key])
+          : field.slider ? "—" : field.placeholder ?? this.strings.inherit;
       });
     }
     control.name = field.key;
@@ -210,11 +270,11 @@ export class HeaderOptionsDialog {
         type: "range", name: `${field.key}-slider`, min: String(range.min), max: String(range.max),
         step: String(range.step), value: String(range.defaultValue)
       });
-      this.sliders.set(field.key, { input: slider, defaultValue: range.defaultValue });
+      this.sliders.set(field.key, { input: slider, field });
       slider.setAttribute("aria-labelledby", caption.id);
       control.setAttribute("aria-labelledby", caption.id);
       this.translations.push(() => {
-        slider!.setAttribute("aria-valuetext", control.value || this.strings.inherit);
+        slider!.setAttribute("aria-valuetext", control.value || this.inheritText(field));
       });
       label = el("div", { class: "abc-gui-options-field" }, [
         caption, el("div", { class: "abc-gui-options-range" }, [slider, control])
@@ -229,14 +289,12 @@ export class HeaderOptionsDialog {
       slider?.setAttribute("aria-describedby", hint.id);
       label.append(hint);
     }
-    if (field.group === "appearance") {
-      const hint = el("small", { hidden: true });
-      this.overrideHints.set(field.key, hint);
-      this.translations.push(() => {
-        hint.textContent = `${this.strings.overridden} (${String(this.overrides[field.key])})`;
-      });
-      label.append(hint);
-    }
+    const lockHint = el("small", { hidden: true });
+    this.lockHints.set(field.key, lockHint);
+    this.translations.push(() => {
+      lockHint.textContent = `${this.strings.overridden} (${this.formatValue(field, this.host.locked[field.key])})`;
+    });
+    label.append(lockHint);
     const updateDraft = () => {
       this.syncSlider(field.key);
       const options = this.readOptions();
@@ -257,6 +315,31 @@ export class HeaderOptionsDialog {
     return label;
   }
 
+  /** "Default", or "Default (value)" when the host supplies the default. */
+  private inheritText(field: OptionField): string {
+    return has(this.host.defaults, field.key)
+      ? `${this.strings.inherit} (${this.formatValue(field, this.host.defaults[field.key])})`
+      : this.strings.inherit;
+  }
+
+  private formatValue(field: OptionField, value: unknown): string {
+    if (field.type === "boolean" && typeof value === "boolean") return value ? this.strings.yes : this.strings.no;
+    if (field.type === "instrument" && typeof value === "number") {
+      const name = abcjs.synth.instrumentIndexToName?.[value];
+      if (name) return `${value}: ${name.replace(/_/g, " ")}`;
+    }
+    return String(value);
+  }
+
+  /** Reset keeps the document's own values for options the host fixes. */
+  private lockedDraft(): string {
+    const kept: Record<string, unknown> = {};
+    for (const key of Object.keys(this.host.locked)) {
+      if (has(this.original, key)) kept[key] = this.original[key];
+    }
+    return Object.keys(kept).length ? JSON.stringify(kept, null, 2) : "{}";
+  }
+
   private readOptions(): Record<string, unknown> | null {
     try {
       return parseOptionsJson(this.json.value);
@@ -272,30 +355,37 @@ export class HeaderOptionsDialog {
     this.clearError();
     for (const field of FIELDS) {
       const control = this.controls.get(field.key)!;
-      const value = control.disabled ? this.overrides[field.key] : options[field.key];
-      control.value = typeof value === "number" || typeof value === "boolean" ? String(value) : "";
+      this.setControlValue(field, control.disabled ? this.host.locked[field.key] : options[field.key]);
       this.syncSlider(field.key);
     }
+  }
+
+  private setControlValue(field: OptionField, value: unknown): void {
+    this.controls.get(field.key)!.value = typeof value === "number" || typeof value === "boolean" ? String(value) : "";
   }
 
   private syncSlider(key: string): void {
     const slider = this.sliders.get(key);
     const control = this.controls.get(key);
     if (!slider || !control || !control.validity.valid) return;
-    slider.input.value = control.value || String(slider.defaultValue);
-    slider.input.setAttribute("aria-valuetext", control.value || this.strings.inherit);
+    const fallback = this.host.defaults[key];
+    slider.input.value = control.value
+      || String(typeof fallback === "number" ? fallback : slider.field.slider!.defaultValue);
+    slider.input.setAttribute("aria-valuetext", control.value || this.inheritText(slider.field));
   }
 
-  private updateOverrides(): void {
-    for (const [key, hint] of this.overrideHints) {
-      const overridden = this.overrides[key] !== undefined;
-      this.controls.get(key)!.disabled = overridden;
-      hint.hidden = !overridden;
+  private updateLocks(): void {
+    for (const [key, hint] of this.lockHints) {
+      const locked = has(this.host.locked, key);
+      this.controls.get(key)!.disabled = locked;
+      const slider = this.sliders.get(key);
+      if (slider) slider.input.disabled = locked;
+      hint.hidden = !locked;
     }
     for (const update of this.translations) update();
   }
 
-  private showError(kind: "json" | "value", key = ""): void {
+  private showError(kind: "json" | "value" | "locked", key = ""): void {
     this.errorKind = kind;
     this.errorKey = key;
     this.refreshError();
@@ -308,8 +398,10 @@ export class HeaderOptionsDialog {
   }
 
   private refreshError(): void {
+    const label = this.strings.labels[this.errorKey] ?? this.errorKey;
     this.error.hidden = this.errorKind === null;
     this.error.textContent = this.errorKind === "json" ? this.strings.invalidJson
-      : this.errorKind === "value" ? this.strings.invalidValue(this.strings.labels[this.errorKey] ?? this.errorKey) : "";
+      : this.errorKind === "value" ? this.strings.invalidValue(label)
+        : this.errorKind === "locked" ? this.strings.lockedValue(label) : "";
   }
 }

@@ -8,7 +8,18 @@
 import abcjs, { AbcVisualParams } from "abcjs";
 import type { SynthOptions } from "abcjs";
 import type { AbcDocument } from "../model/document.js";
-import { synthOptions, visualOptions } from "../parser/options.js";
+import {
+  applyDefaults, isHeaderOptionKey, resolveDefaults, synthOptions, visualOptions,
+  type HeaderOptionDefaults, type ResolvedDefaults
+} from "../parser/options.js";
+
+/** What the host decides about header options, as the settings dialog needs it. */
+export interface HostHeaderOptions {
+  /** Default values the document may override. */
+  defaults: Readonly<Record<string, unknown>>;
+  /** Values the document cannot change: fixed defaults and header keys in `abcjsOptions`. */
+  locked: Readonly<Record<string, unknown>>;
+}
 
 export interface SelectionEvent {
   startChar: number;
@@ -42,11 +53,18 @@ export class ScoreView {
   /** Host params override document options and the `responsive` default.
    *  The editor applies its selection and parsing invariants afterward. */
   private extraParams: AbcVisualParams = {};
+  private defaults: ResolvedDefaults = resolveDefaults();
 
-  constructor(host: HTMLElement, doc: AbcDocument, extraParams: AbcVisualParams = {}) {
+  constructor(
+    host: HTMLElement,
+    doc: AbcDocument,
+    extraParams: AbcVisualParams = {},
+    defaults: HeaderOptionDefaults = {}
+  ) {
     this.host = host;
     this.doc = doc;
     this.extraParams = { ...extraParams };
+    this.defaults = resolveDefaults(defaults);
     this.host.classList.add("abc-gui-score");
     this.doc.on(() => this.scheduleRender());
     this.render();
@@ -77,12 +95,31 @@ export class ScoreView {
     return this.synthOptions;
   }
 
-  getAbcjsOptions(): AbcVisualParams {
-    return { ...visualOptions(this.doc.source().options), ...this.extraParams };
+  /** Replace the host defaults for header options and trigger a re-render. */
+  setHeaderOptionDefaults(defaults: HeaderOptionDefaults): void {
+    this.defaults = resolveDefaults(defaults);
+    this.scheduleRender();
   }
 
-  getAbcjsOverrides(): AbcVisualParams {
-    return { ...this.extraParams };
+  getAbcjsOptions(): AbcVisualParams {
+    return { ...visualOptions(this.headerOptions()), ...this.extraParams };
+  }
+
+  getHostHeaderOptions(): HostHeaderOptions {
+    const defaults: Record<string, unknown> = {};
+    const locked: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(this.defaults.values)) {
+      (this.defaults.locked.has(key) ? locked : defaults)[key] = value;
+    }
+    for (const [key, value] of Object.entries(this.extraParams)) {
+      if (isHeaderOptionKey(key) && value !== undefined) locked[key] = value;
+    }
+    return { defaults, locked };
+  }
+
+  /** Document header options combined with the host defaults. */
+  private headerOptions(): Record<string, unknown> {
+    return applyDefaults(this.doc.source().options, this.defaults);
   }
 
   setSelected(
@@ -129,7 +166,7 @@ export class ScoreView {
       return;
     }
     const source = this.doc.source();
-    this.synthOptions = synthOptions(source.options);
+    this.synthOptions = synthOptions(this.headerOptions());
     if (source.headerError && !this.warnedAboutHeader) {
       console.warn("[abc-gui] Invalid abcjs options header:", source.headerError);
     }

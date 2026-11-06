@@ -12,6 +12,7 @@ import { RawView } from "./raw-view.js";
 import { HeaderOptionsDialog } from "./header-options.js";
 import { el } from "./dom.js";
 import { LocaleId, Strings, resolveStrings } from "../i18n.js";
+import type { HeaderOptionDefaults } from "../parser/options.js";
 import { AbcVisualParams } from "abcjs";
 
 export type HeaderFieldTag = "T" | "C" | "R" | "K" | "L" | "Q" | "V";
@@ -62,8 +63,20 @@ export interface AbcEditorOptions {
    *   - `print: boolean`, `oneSvgPerLine: boolean`, `wrap: object`, …
    * See the abcjs docs for the full list. Values here override the
    * editor's built-in defaults except for selection/click handling.
+   * Keys the options header also supports are fixed: they override the
+   * header and appear read-only in the header settings dialog.
    */
   abcjsOptions?: AbcVisualParams;
+  /**
+   * Defaults for the options header (`swing`, `qpm`, `program`, `scale`, …),
+   * one entry per option:
+   *   - `value` applies when the document header does not set the option.
+   *   - `editable: false` fixes the value: the header cannot override it and
+   *     the settings dialog shows it read-only. Default: `true`.
+   * Values are checked like header values; invalid entries are ignored.
+   * Defaults are never written into the document.
+   */
+  headerOptionDefaults?: HeaderOptionDefaults;
 }
 
 export class AbcEditor {
@@ -133,7 +146,7 @@ export class AbcEditor {
     rawHost.hidden = !this.rawVisible;
     this.updateRawLayoutState();
 
-    this.score = new ScoreView(scoreHost, this.doc, opts.abcjsOptions ?? {});
+    this.score = new ScoreView(scoreHost, this.doc, opts.abcjsOptions ?? {}, opts.headerOptionDefaults ?? {});
     this.panel = new PropertyPanel(
       panelHost,
       this.doc,
@@ -146,7 +159,7 @@ export class AbcEditor {
     );
     this.player = new MidiPlayer();
     this.headerOptions = new HeaderOptionsDialog(
-      this.container, this.doc, this.strings, () => this.score.getAbcjsOverrides()
+      this.container, this.doc, this.strings, () => this.score.getHostHeaderOptions()
     );
     // Any re-render invalidates the primed synth buffer so playback always
     // reflects the latest ABC source.
@@ -395,6 +408,17 @@ export class AbcEditor {
    */
   setAbcjsOptions(params: AbcVisualParams): void {
     this.score.setAbcjsOptions(params);
+    // Header keys in abcjsOptions are fixed in the settings dialog.
+    this.headerOptions.refreshHostOptions();
+  }
+
+  /**
+   * Replace the options-header defaults (see `headerOptionDefaults`).
+   * Re-renders the score; the next playback uses the new values.
+   */
+  setHeaderOptionDefaults(defaults: HeaderOptionDefaults): void {
+    this.score.setHeaderOptionDefaults(defaults);
+    this.headerOptions.refreshHostOptions();
   }
 
   /**

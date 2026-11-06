@@ -229,6 +229,9 @@ export interface HeaderOptionsStrings {
   advanced: string;
   invalidJson: string;
   invalidValue: (label: string) => string;
+  /** Apply was blocked because the draft changes a value the host fixes.
+   *  Optional for translations written before it existed: English is used then. */
+  lockedValue?: (label: string) => string;
   overridden: string;
   swingHint: string;
   labels: Record<string, string>;
@@ -250,6 +253,7 @@ export const en: Strings = {
     advanced: "Advanced: all options (JSON)",
     invalidJson: "Enter a valid JSON object in the advanced options.",
     invalidValue: (label) => `Check the value of “${label}”.`,
+    lockedValue: (label) => `“${label}” is set by the host application and cannot be changed here.`,
     overridden: "This value is set by the host application.",
     swingHint: "50%: straight · 65%: swing · 66%: triplet feel · 75%: maximum",
     labels: {
@@ -518,6 +522,7 @@ export const hu: Strings = {
     advanced: "Haladó: összes paraméter (JSON)",
     invalidJson: "Adj meg érvényes JSON-objektumot a haladó beállításoknál.",
     invalidValue: (label) => `Ellenőrizd a(z) „${label}” mező értékét.`,
+    lockedValue: (label) => `A(z) „${label}” értékét az alkalmazás rögzíti, itt nem módosítható.`,
     overridden: "Ezt az értéket az alkalmazás rögzíti.",
     swingHint: "50%: egyenes · 65%: swing · 66%: triolás · 75%: maximum",
     labels: {

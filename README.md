@@ -121,6 +121,48 @@ note edits and undo/redo. Changing or removing it refreshes playback options.
 Invalid JSON is ignored with one browser-console diagnostic per invalid-header episode, while the ABC body
 remains editable and playable.
 
+### Host defaults
+
+The host application can supply a default for any header option, and decide
+per option whether the user may change it:
+
+```ts
+const editor = mount(host, {
+  headerOptionDefaults: {
+    swing: { value: 60 },                  // the header may override it
+    program: { value: 24 },                // nylon guitar unless the header says otherwise
+    qpm: { value: 100, editable: false },  // fixed: the header cannot change it
+  },
+});
+
+editor.setHeaderOptionDefaults({ swing: { value: 65 } }); // replaces all defaults
+```
+
+For each option, the value comes from the first source that sets it:
+
+1. `abcjsOptions` given by the host (rendering only)
+2. a default with `editable: false`
+3. the document header
+4. a default with `editable: true` (the default)
+5. the abcjs built-in default
+
+Defaults are never written into the document, so `getValue()` returns only what
+the user wrote. Defaults are checked like header values; invalid or
+unsupported entries are ignored with a console warning. `format` and `wrap` are
+replaced as a whole, not merged key by key.
+
+In the header settings dialog:
+
+- Editable defaults appear as the placeholder or as the **Default (…)** choice.
+  The swing and volume sliders rest at the default value.
+- Fixed values, from `editable: false` or from header keys in `abcjsOptions`, are
+  read-only and show the value the host sets. Apply refuses a draft that changes
+  them, including through the JSON editor. **Reset settings** keeps the
+  document's own entries for them, so the document still carries those values
+  into contexts where they are editable.
+- If the raw ABC pane is used to set a fixed option in the header, the header
+  value is kept in the text but has no effect.
+
 ## API
 
 ```ts
@@ -151,10 +193,20 @@ mount(container: HTMLElement, options?: {
   chordVerifier?: (chordName: string, germanAlphabet: boolean) => boolean;
   /**
    * Forwarded to abcjs.renderAbc (e.g. germanAlphabet, jazzchords,
-   * visualTranspose, scale, staffwidth, format, ...).
+   * visualTranspose, scale, staffwidth, format, ...). Keys the options
+   * header also supports are fixed and shown read-only in the settings dialog.
    */
   abcjsOptions?: AbcVisualParams;
+  /**
+   * Defaults for the options header, per option: `value` applies when the
+   * header does not set it; `editable: false` fixes it (see "Host defaults").
+   */
+  headerOptionDefaults?: HeaderOptionDefaults;
 }): AbcEditor;
+
+type HeaderOptionDefaults = {
+  [K in HeaderOptionKey]?: { value: HeaderOptionValues[K]; editable?: boolean };
+};
 
 interface AbcEditor {
   getValue(): string;
@@ -162,6 +214,8 @@ interface AbcEditor {
   setLocale(locale: "en" | "hu" | Strings): void;
   setTheme(theme: "light" | "dark"): void;
   setAbcjsOptions(params: AbcVisualParams): void;
+  /** Replace the options-header defaults; re-renders the score. */
+  setHeaderOptionDefaults(defaults: HeaderOptionDefaults): void;
   /**
    * Return a short HTML usage tutorial in the currently active locale.
    * Suitable for dropping into a splash-screen or help dialog.

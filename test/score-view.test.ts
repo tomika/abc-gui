@@ -99,3 +99,52 @@ describe("score options header", () => {
     score.destroy();
   });
 });
+
+describe("host defaults for header options", () => {
+  it("renders and plays with defaults the header does not set", () => {
+    const doc = new AbcDocument("K:C\nCDEF|");
+    const score = new ScoreView(host(), doc, {}, {
+      swing: { value: 60 }, jazzchords: { value: true }, scale: { value: 1.4, editable: false }
+    });
+    expect(vi.mocked(abcjs.renderAbc).mock.calls[0][2]).toMatchObject({ jazzchords: true, scale: 1.4 });
+    expect(score.getSynthOptions()).toEqual({ swing: 60 });
+    expect(score.getAbcjsOptions()).toMatchObject({ jazzchords: true, scale: 1.4 });
+    expect(doc.value).toBe("K:C\nCDEF|");
+    score.destroy();
+  });
+
+  it("lets the header override editable defaults and ignores it for fixed ones", () => {
+    const doc = new AbcDocument('{"swing":70,"qpm":200,"jazzchords":false}\n---\nK:C\nCDEF|');
+    const score = new ScoreView(host(), doc, {}, {
+      swing: { value: 60 }, qpm: { value: 90, editable: false }, jazzchords: { value: true, editable: false }
+    });
+    expect(score.getSynthOptions()).toEqual({ swing: 70, qpm: 90 });
+    expect(vi.mocked(abcjs.renderAbc).mock.calls[0][2]).toMatchObject({ jazzchords: true });
+    score.destroy();
+  });
+
+  it("re-renders with replaced defaults", () => {
+    vi.useFakeTimers();
+    const doc = new AbcDocument("K:C\nCDEF|");
+    const score = new ScoreView(host(), doc, {}, { swing: { value: 60 } });
+    const rendered = vi.fn();
+    score.onRender(rendered);
+    score.setHeaderOptionDefaults({ qpm: { value: 80 } });
+    vi.advanceTimersByTime(30);
+    expect(rendered).toHaveBeenCalledOnce();
+    expect(score.getSynthOptions()).toEqual({ qpm: 80 });
+    score.destroy();
+  });
+
+  it("tells the dialog which values are defaults and which ones the host fixes", () => {
+    const doc = new AbcDocument("K:C\nCDEF|");
+    const score = new ScoreView(host(), doc, { staffwidth: 600, responsive: "resize" }, {
+      swing: { value: 60 }, qpm: { value: 90, editable: false }, staffwidth: { value: 400 }
+    });
+    expect(score.getHostHeaderOptions()).toEqual({
+      defaults: { swing: 60, staffwidth: 400 },
+      locked: { qpm: 90, staffwidth: 600 }
+    });
+    score.destroy();
+  });
+});
