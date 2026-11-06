@@ -173,7 +173,7 @@ export class StatusBar {
 
   private insertMissingField(name: FieldName, value: string): Range {
     const line = `${name}:${value}`;
-    const src = this.deps.doc.value;
+    const src = this.deps.doc.source().abc;
     const at = this.resolveInsertOffset(src);
     const needsPrefix = at > 0 && src[at - 1] !== "\n";
     const needsSuffix = at < src.length && src[at] !== "\n";
@@ -221,7 +221,7 @@ export class StatusBar {
       return xAfter;
     }
 
-    return 0;
+    return this.deps.doc.source().bodyStart ?? 0;
   }
 
   private buildSnapshot(): StatusSnapshot {
@@ -276,7 +276,7 @@ export class StatusBar {
       }
     }
 
-    const src = this.deps.doc.value;
+    const src = this.deps.doc.source().abc;
     const fieldHits = scanFieldHits(src);
     const lines = scanLines(src);
     const firstMusicStart = this.firstMusicStart(elements);

@@ -14,6 +14,8 @@
  */
 
 export interface Strings {
+  /** Optional for compatibility with existing custom translations. */
+  headerOptions?: HeaderOptionsStrings;
   panel: {
     emptyHint: string;
     kind: {
@@ -212,7 +214,54 @@ export interface Strings {
   tutorial: string;
 }
 
+export interface HeaderOptionsStrings {
+  button: string;
+  title: string;
+  description: string;
+  playback: string;
+  appearance: string;
+  inherit: string;
+  yes: string;
+  no: string;
+  apply: string;
+  cancel: string;
+  reset: string;
+  advanced: string;
+  invalidJson: string;
+  invalidValue: (label: string) => string;
+  overridden: string;
+  swingHint: string;
+  labels: Record<string, string>;
+}
+
 export const en: Strings = {
+  headerOptions: {
+    button: "Settings",
+    title: "Header settings",
+    description: "Playback and appearance settings for the whole score. Leave a field empty to use the score or application default.",
+    playback: "Playback",
+    appearance: "Appearance",
+    inherit: "Default",
+    yes: "Yes",
+    no: "No",
+    apply: "Apply",
+    cancel: "Cancel",
+    reset: "Reset settings",
+    advanced: "Advanced: all options (JSON)",
+    invalidJson: "Enter a valid JSON object in the advanced options.",
+    invalidValue: (label) => `Check the value of “${label}”.`,
+    overridden: "This value is set by the host application.",
+    swingHint: "50%: straight · 65%: swing · 66%: triplet feel · 75%: maximum",
+    labels: {
+      swing: "Swing (%)", qpm: "Playback tempo (BPM)", program: "Melody instrument",
+      midiTranspose: "Playback transpose (semitones)", chordsOff: "Mute chord accompaniment",
+      bassprog: "Bass instrument", chordprog: "Chord instrument", bassvol: "Bass volume (0–127)",
+      chordvol: "Chord volume (0–127)",
+      scale: "Score scale", staffwidth: "Staff width (px)", jazzchords: "Jazz chord formatting",
+      germanAlphabet: "German chord names (H/B)", visualTranspose: "Display transpose (semitones)",
+      paddingtop: "Top padding (px)", paddingbottom: "Bottom padding (px)"
+    }
+  },
   panel: {
     emptyHint:
       "Click a note, rest, bar, or header line to edit its properties.",
@@ -447,11 +496,40 @@ export const en: Strings = {
     "<h3>Raw text pane</h3>",
     "<p>The raw ABC pane can be toggled from the toolbar. Selecting in the raw text highlights the corresponding element in the score.</p>",
     "<h3>Playback</h3>",
-    "<p>Press the play button to hear the tune from the selected note (or from the start).</p>"
+    "<p>Press the play button to hear the tune from the selected note (or from the start).</p>",
+    "<h3>Header settings</h3>",
+    "<p>Open the <strong>⚙</strong> button in the toolbar to set swing, playback tempo, instruments and score appearance. Press Apply to save. Further parameters are available under Advanced: all options (JSON).</p>"
   ].join("")
 };
 
 export const hu: Strings = {
+  headerOptions: {
+    button: "Beállítások",
+    title: "Fejlécparaméterek",
+    description: "A teljes kotta lejátszását és megjelenítését szabályozó beállítások. Az üres mezők a kotta vagy az alkalmazás alapértékét használják.",
+    playback: "Lejátszás",
+    appearance: "Megjelenítés",
+    inherit: "Alapértelmezett",
+    yes: "Igen",
+    no: "Nem",
+    apply: "Alkalmaz",
+    cancel: "Mégse",
+    reset: "Beállítások törlése",
+    advanced: "Haladó: összes paraméter (JSON)",
+    invalidJson: "Adj meg érvényes JSON-objektumot a haladó beállításoknál.",
+    invalidValue: (label) => `Ellenőrizd a(z) „${label}” mező értékét.`,
+    overridden: "Ezt az értéket az alkalmazás rögzíti.",
+    swingHint: "50%: egyenes · 65%: swing · 66%: triolás · 75%: maximum",
+    labels: {
+      swing: "Swing (%)", qpm: "Lejátszási tempó (BPM)", program: "Dallam hangszere",
+      midiTranspose: "Lejátszás transzponálása (félhang)", chordsOff: "Akkordkíséret némítása",
+      bassprog: "Basszus hangszere", chordprog: "Akkordkíséret hangszere", bassvol: "Basszus hangereje (0–127)",
+      chordvol: "Akkordkíséret hangereje (0–127)",
+      scale: "Kotta nagyítása", staffwidth: "Kottasor szélessége (px)", jazzchords: "Jazzakkordok formázása",
+      germanAlphabet: "Német akkordnevek (H/B)", visualTranspose: "Kottakép transzponálása (félhang)",
+      paddingtop: "Felső margó (px)", paddingbottom: "Alsó margó (px)"
+    }
+  },
   panel: {
     emptyHint:
       "Kattints egy hangra, szünetre, ütemvonalra vagy fejlécsorra a tulajdonságok szerkesztéséhez.",
@@ -688,7 +766,9 @@ export const hu: Strings = {
     "<h3>Nyers szöveg panel</h3>",
     "<p>A nyers ABC panel az eszköztárból kapcsolható. A nyers szövegben való kiválasztás kiemeli a megfelelő elemet a kottán.</p>",
     "<h3>Lejátszás</h3>",
-    "<p>Nyomd meg a lejátszás gombot, hogy meghallgasd a dallamot a kiválasztott hangtól (vagy az elejétől) kezdve.</p>"
+    "<p>Nyomd meg a lejátszás gombot, hogy meghallgasd a dallamot a kiválasztott hangtól (vagy az elejétől) kezdve.</p>",
+    "<h3>Fejlécparaméterek</h3>",
+    "<p>Az eszköztár <strong>⚙</strong> gombjával állíthatod a swinget, a lejátszási tempót, a hangszereket és a kotta megjelenítését. Az Alkalmaz gomb menti az értékeket. A további paraméterek a Haladó: összes paraméter (JSON) részben érhetők el.</p>"
   ].join("")
 };
 

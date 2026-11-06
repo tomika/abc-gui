@@ -67,6 +67,60 @@ Open [`demo/index.html`](./demo/index.html) locally after `npm run build` for an
 The demo initializes theme from your system color-scheme preference (`prefers-color-scheme`), and shows a first-run splash screen built from `editor.getTutorialHtml()` (click the **Help** button to reopen).
 It also switches abcjs note naming to `germanAlphabet` while Hungarian UI is selected.
 
+## abcjs options header
+
+Click **⚙** in the editor toolbar to open the header settings (tooltip:
+**Header settings**, or **Fejlécparaméterek** in Hungarian). The form includes
+swing (a slider from 50 to 75, plus a number field that also accepts decimals
+such as `66.67`), playback tempo, instrument
+selectors, accompaniment volumes and score appearance. It also works
+when the raw ABC pane is hidden. **Apply** saves the settings; **Cancel** or Escape
+discards the draft. **Reset settings**, followed by Apply, removes the header.
+The **Advanced: all options (JSON)** section exposes additional abcjs parameters
+and preserves settings not covered by the form. All changes support undo/redo.
+
+An optional JSON object at the start of the source, followed by a line containing
+`---`, sets abcjs rendering and playback options:
+
+```abc
+{ "swing": 65 }
+---
+Q:1/4=120
+K:F
+M:4/4
+"F"z2AA BABd|"C"cGEc "Bb"BFDB|"F/A"AFCA "Gm"GABA|
+```
+
+This header is an abc-gui extension to ABC notation. abcjs expects settings as
+JavaScript API parameters: abc-gui reads the JSON and forwards supported data
+options to the parser, renderer and [`CreateSynth.init({ options: ... })`](https://docs.abcjs.net/audio/synthesized-sound#init-synthoptions).
+For example, `swing`, `chordsOff`, `program` and `qpm` control playback, while
+`jazzchords`, `scale` and `format` control engraving. Host-provided `abcjsOptions`
+override header values for rendering. Complete parsing, selection and the
+editor's click handler always remain enabled.
+
+Playback accepts `swing`, `qpm`, `defaultQpm`, `program`, `midiTranspose`, `channel`,
+`chordsOff`, `voicesOff`, `bassprog`, `chordprog`, `bassvol`, `chordvol`, `gchord`,
+`drum`, `drumBars`, `drumIntro`, `drumOff`, `pan`, `fadeLength` and
+`soundFontVolumeMultiplier`, with matching data types. Rendering accepts the
+appearance controls in the dialog, standard font/format settings, wrapping,
+line breaks, colors and spacing. Unknown keys, callbacks, parser-control
+switches and document-provided `soundFontUrl` values are preserved in the JSON
+but never passed to abcjs.
+
+The [abcjs swing example](https://paulrosen.github.io/abcjs/examples/editor-swing.html)
+defines swing as the percentage of a note pair occupied by the first note:
+`50` or less means straight timing, `65` gives a 65:35 ratio, approximately `66.67`
+gives triplet swing, and abcjs caps it at `75`. Any non-negative number is
+accepted, including decimals. In meters with denominator 4 it affects
+eighth notes; with denominator 8 it affects sixteenth notes. The written score
+stays unchanged.
+
+The JSON can span multiple lines. It stays intact in `getValue()`, `onChange`,
+note edits and undo/redo. Changing or removing it refreshes playback options.
+Invalid JSON is ignored with one browser-console diagnostic per invalid-header episode, while the ABC body
+remains editable and playable.
+
 ## API
 
 ```ts

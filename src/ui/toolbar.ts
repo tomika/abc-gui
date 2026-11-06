@@ -11,7 +11,7 @@
 
 import { AbcDocument } from "../model/document.js";
 import { button, el } from "./dom.js";
-import { Strings } from "../i18n.js";
+import { en, Strings } from "../i18n.js";
 
 export interface ToolbarDeps {
   doc: AbcDocument;
@@ -37,6 +37,7 @@ export interface ToolbarDeps {
   isPlaying: () => boolean;
   play: () => void;
   stop: () => void;
+  openHeaderOptions: () => void;
   /** Subscribe to playback-state changes so the toolbar can toggle icons. */
   onPlaybackStateChange: (cb: () => void) => void;
   /** Subscribe to selection changes so the toolbar can toggle the delete button. */
@@ -124,6 +125,13 @@ export class Toolbar {
     this.stopBtn = stopBtn;
     const playbackGroup = el("div", { class: "abc-gui-group", title: s.toolbar.groups.playback });
     playbackGroup.append(playBtn, stopBtn);
+
+    const settings = s.headerOptions ?? en.headerOptions!;
+    const settingsBtn = button("⚙", settings.title, () => this.deps.openHeaderOptions());
+    settingsBtn.classList.add("abc-gui-settings-button");
+    settingsBtn.setAttribute("aria-label", settings.button);
+    settingsBtn.setAttribute("aria-haspopup", "dialog");
+    playbackGroup.append(settingsBtn);
 
     const rawSelectBtn = button("⇌", s.toolbar.rawSelectOn, () => {
       this.deps.setRawSelectEnabled(!this.deps.getRawSelectEnabled());

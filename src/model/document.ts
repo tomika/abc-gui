@@ -8,6 +8,8 @@
  */
 
 import abcjs from "abcjs";
+import { parseSource, sameOptions, type AbcSource } from "../parser/source.js";
+import { visualOptions } from "../parser/options.js";
 
 export interface ChangeEvent {
   /** whole source after the edit */
@@ -32,6 +34,7 @@ export class AbcDocument {
   private _value: string;
   private listeners: ChangeListener[] = [];
   private _parsed: unknown[] | null = null;
+  private _source: { value: string; result: AbcSource } | null = null;
   /** Undo stack: snapshots of _value *before* each mutation. */
   private undoStack: string[] = [];
   /** Redo stack: snapshots restored by undo(); cleared by new mutations. */
@@ -51,6 +54,31 @@ export class AbcDocument {
 
   get value(): string {
     return this._value;
+  }
+
+  /** Prepared ABC and document-level abcjs options; raw source stays intact. */
+  source(): AbcSource {
+    if (!this._source || this._source.value !== this._value) {
+      this._source = { value: this._value, result: parseSource(this._value) };
+    }
+    return this._source.result;
+  }
+
+  /** Replace only the document options header, preserving the ABC body. */
+  setSourceOptions(options: Record<string, unknown>): void {
+    const source = this.source();
+    const hasOptions = Object.keys(options).length > 0;
+    if (!source.headerError && sameOptions(source.options, options)
+      && (hasOptions || source.bodyStart === undefined)) return;
+    const newline = this._value.includes("\r\n") ? "\r\n" : "\n";
+    const start = this._value.startsWith("\uFEFF") ? 1 : 0;
+    const header = hasOptions
+      ? JSON.stringify(options, null, 2).replace(/\n/g, newline) + newline + "---" + newline
+      : "";
+    // A settings submission is a separate undo step from preceding note edits.
+    this.lastPushAt = -Infinity;
+    this.replace(start, source.bodyStart ?? start, header);
+    this.lastPushAt = -Infinity;
   }
 
   setValue(v: string, { silent = false }: { silent?: boolean } = {}) {
@@ -179,10 +207,11 @@ export class AbcDocument {
   parsed(): unknown[] {
     if (this._parsed) return this._parsed;
     const api = abcjs as unknown as {
-      parseOnly?: (src: string) => unknown[];
+      parseOnly?: (src: string, options?: Record<string, unknown>) => unknown[];
     };
     if (typeof api.parseOnly === "function") {
-      this._parsed = api.parseOnly(this._value) || [];
+      const source = this.source();
+      this._parsed = api.parseOnly(source.abc, { ...visualOptions(source.options), header_only: false, stop_on_warning: false }) || [];
     } else {
       this._parsed = [];
     }
@@ -230,7 +259,7 @@ export class AbcDocument {
    * inside a music line or a comment line.
    */
   infoLineAt(offset: number): { startChar: number; endChar: number } | null {
-    const v = this._value;
+    const v = this.source().abc;
     if (offset < 0 || offset > v.length) return null;
     // Extend back to start of line.
     let s = offset;
@@ -249,7 +278,7 @@ export class AbcDocument {
    * contains `offset`, if any.
    */
   inlineFieldAt(offset: number): { startChar: number; endChar: number } | null {
-    const v = this._value;
+    const v = this.source().abc;
     // Walk backwards to the nearest unmatched `[` on the same line.
     let s = offset;
     while (s > 0 && v[s - 1] !== "\n") {
@@ -277,7 +306,7 @@ export class AbcDocument {
     name: string,
     offset = this._value.length
   ): { startChar: number; endChar: number } | null {
-    const v = this._value;
+    const v = this.source().abc;
     const limit = Math.max(0, Math.min(offset, v.length));
     let lineStart = 0;
     let last: { startChar: number; endChar: number } | null = null;
@@ -306,7 +335,7 @@ export class AbcDocument {
    * pragmatic default which is also abcjs's fallback.
    */
   unitLengthAt(offset: number): { num: number; den: number } {
-    const v = this._value;
+    const v = this.source().abc;
     const upto = v.slice(0, Math.max(0, Math.min(offset, v.length)));
     // Match the last L: directive: either header/body form `L:1/8` at start of
     // a line, or inline `[L:1/8]` anywhere. Use a greedy scan by iterating
@@ -329,7 +358,7 @@ export class AbcDocument {
    * Defaults to C major when no `K:` is found.
    */
   keyAt(offset: number): { tonic: string; accidental: "" | "#" | "b"; mode: string } {
-    const v = this._value;
+    const v = this.source().abc;
     const upto = v.slice(0, Math.max(0, Math.min(offset, v.length)));
     // Match either header/body line `K:...` or inline `[K:...]`.
     const re = /(?:^|\n)\s*K:\s*([^\n\r\]]*)|\[\s*K:\s*([^\]\n\r]*)\]/g;

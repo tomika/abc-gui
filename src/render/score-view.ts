@@ -6,7 +6,9 @@
  */
 
 import abcjs, { AbcVisualParams } from "abcjs";
+import type { SynthOptions } from "abcjs";
 import type { AbcDocument } from "../model/document.js";
+import { synthOptions, visualOptions } from "../parser/options.js";
 
 export interface SelectionEvent {
   startChar: number;
@@ -35,9 +37,10 @@ export class ScoreView {
   private selected: { startChar: number; endChar: number } | null = null;
   private selectedClasses: string | null = null;
   private lastTune: unknown = null;
-  /** Caller-supplied extra params forwarded to `abcjs.renderAbc`. Merged on
-   *  top of the defaults, so consumers can override `responsive`,
-   *  `selectionColor`, etc. if desired. */
+  private synthOptions: SynthOptions = {};
+  private warnedAboutHeader = false;
+  /** Host params override document options and the `responsive` default.
+   *  The editor applies its selection and parsing invariants afterward. */
   private extraParams: AbcVisualParams = {};
 
   constructor(host: HTMLElement, doc: AbcDocument, extraParams: AbcVisualParams = {}) {
@@ -67,6 +70,19 @@ export class ScoreView {
   /** The most recently rendered abcjs tune object, or null if unavailable. */
   getTune(): unknown {
     return this.lastTune;
+  }
+
+  /** Options captured with the rendered tune, so playback uses the same source. */
+  getSynthOptions(): SynthOptions {
+    return this.synthOptions;
+  }
+
+  getAbcjsOptions(): AbcVisualParams {
+    return { ...visualOptions(this.doc.source().options), ...this.extraParams };
+  }
+
+  getAbcjsOverrides(): AbcVisualParams {
+    return { ...this.extraParams };
   }
 
   setSelected(
@@ -112,9 +128,19 @@ export class ScoreView {
       this.host.textContent = "(abcjs not available)";
       return;
     }
-    const result = api.renderAbc(this.host, this.doc.value, {
-      add_classes: true,
+    const source = this.doc.source();
+    this.synthOptions = synthOptions(source.options);
+    if (source.headerError && !this.warnedAboutHeader) {
+      console.warn("[abc-gui] Invalid abcjs options header:", source.headerError);
+    }
+    this.warnedAboutHeader = !!source.headerError;
+    const result = api.renderAbc(this.host, source.abc, {
       responsive: "resize",
+      ...this.getAbcjsOptions(),
+      // These invariants belong to the editor, not to document or host options.
+      add_classes: true,
+      header_only: false,
+      stop_on_warning: false,
       // Make every drawn element selectable — by default abcjs only allows
       // clicks on note/tabNumber, which means clefs, key & meter signatures,
       // bar lines, tempo, metadata, decorations, etc. are silently ignored.
@@ -125,10 +151,7 @@ export class ScoreView {
       // attributes on child paths) while notes still look blue because
       // our CSS class lands on the whole group.
       selectionColor: "#1659c7",
-      // Caller-provided overrides (germanAlphabet, jazzchords, staffwidth,
-      // scale, visualTranspose, paddingtop/bottom, format, etc.) go before
-      // `clickListener` so consumers cannot accidentally replace it.
-      ...this.extraParams,
+      // Keep the editor's click handler fixed alongside the invariants above.
       clickListener: (
         abcelem: {
           startChar?: number;

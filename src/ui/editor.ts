@@ -9,6 +9,7 @@ import { PropertyPanel, Selection } from "./property-panel.js";
 import { Toolbar } from "./toolbar.js";
 import { StatusBar } from "./status-bar.js";
 import { RawView } from "./raw-view.js";
+import { HeaderOptionsDialog } from "./header-options.js";
 import { el } from "./dom.js";
 import { LocaleId, Strings, resolveStrings } from "../i18n.js";
 import { AbcVisualParams } from "abcjs";
@@ -71,6 +72,7 @@ export class AbcEditor {
   private score: ScoreView;
   private panel: PropertyPanel;
   private toolbar: Toolbar;
+  private headerOptions: HeaderOptionsDialog;
   private raw: RawView | null = null;
   private rawHost: HTMLElement | null = null;
   private rawVisible = false;
@@ -142,18 +144,22 @@ export class AbcEditor {
         isInfoFieldEditable: (name) => !this.lockedHeaderFields.has(name as HeaderFieldTag)
       }
     );
-    this.panel.setGermanAlphabet(!!opts.abcjsOptions?.germanAlphabet);
     this.player = new MidiPlayer();
+    this.headerOptions = new HeaderOptionsDialog(
+      this.container, this.doc, this.strings, () => this.score.getAbcjsOverrides()
+    );
     // Any re-render invalidates the primed synth buffer so playback always
     // reflects the latest ABC source.
     this.score.onRender(() => {
       this.player.invalidate();
+      this.syncPanelOptions();
       this.firePlaybackChange();
       if (this.pendingFocusAfterRender) {
         this.pendingFocusAfterRender = false;
         this.focusEditor(false);
       }
     });
+    this.syncPanelOptions();
     if (this.rawVisible) {
       this.raw = new RawView(rawHost, this.doc);
       // Clicking / moving caret in the raw textarea selects the enclosing
@@ -178,6 +184,7 @@ export class AbcEditor {
       isPlaying: () => this.player.isPlaying(),
       play: () => this.handlePlay(),
       stop: () => this.handleStop(),
+      openHeaderOptions: () => this.headerOptions.open(),
       onPlaybackStateChange: (cb) => this.playbackListeners.push(cb),
       onSelectionChange: (cb) => this.selectionListeners.push(cb),
       strings: this.strings
@@ -360,6 +367,7 @@ export class AbcEditor {
       this.container.removeEventListener("keydown", this.keydownHandler);
     }
     this.player.invalidate();
+    this.headerOptions.destroy();
     this.score.destroy();
     this.container.innerHTML = "";
     this.container.classList.remove("abc-gui-root");
@@ -372,6 +380,7 @@ export class AbcEditor {
     this.strings = resolveStrings(locale);
     this.toolbar.setStrings(this.strings);
     this.panel.setStrings(this.strings);
+    this.headerOptions.setStrings(this.strings);
   }
 
   /** Switch visual theme. */
@@ -386,7 +395,6 @@ export class AbcEditor {
    */
   setAbcjsOptions(params: AbcVisualParams): void {
     this.score.setAbcjsOptions(params);
-    this.panel.setGermanAlphabet(!!params.germanAlphabet);
   }
 
   /**
@@ -396,6 +404,10 @@ export class AbcEditor {
    */
   getTutorialHtml(): string {
     return this.strings.tutorial;
+  }
+
+  private syncPanelOptions(): void {
+    this.panel.setGermanAlphabet(!!this.score.getAbcjsOptions().germanAlphabet);
   }
 
   private applyTheme(theme: "light" | "dark"): void {
@@ -753,7 +765,7 @@ export class AbcEditor {
     if (!tune) return;
     const startChar = this.currentSelection?.startChar;
     this.player
-      .play(tune, { startChar })
+      .play(tune, { startChar, synthOptions: this.score.getSynthOptions() })
       .then(() => this.firePlaybackChange())
       .catch((err) => {
         // Surface errors to the console but do not crash the editor — MIDI

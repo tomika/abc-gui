@@ -6,13 +6,18 @@
  */
 
 import abcjs from "abcjs";
+import type { NoteMapTrack, SynthOptions } from "abcjs";
+import { synthOptions as filterSynthOptions } from "../parser/options.js";
 
 interface MidiBufferLike {
+  millisecondsPerMeasure: number;
+  meterSize: number;
+  flattened: { totalDuration: number };
   init(params: {
     visualObj: unknown;
     audioContext?: AudioContext;
     millisecondsPerMeasure?: number;
-    options?: unknown;
+    options?: SynthOptions;
   }): Promise<unknown>;
   prime(): Promise<unknown>;
   start(): void;
@@ -32,12 +37,19 @@ export interface PlayOptions {
   /** character offset of the note to start from (inclusive). When omitted
    *  or when no matching event is found, playback starts from the top. */
   startChar?: number;
+  /** Document-level abcjs audio options (including swing). */
+  synthOptions?: SynthOptions;
 }
+
+const DEFAULT_SYNTH_OPTIONS: SynthOptions = {};
 
 export class MidiPlayer {
   private buffer: MidiBufferLike | null = null;
   private preparedFor: unknown = null;
   private audioContext: AudioContext | null = null;
+  private preparedOptions: SynthOptions | null = null;
+  private sourceTiming: SourceTiming[] = [];
+  private generation = 0;
 
   /** Return true when the browser environment supports audio playback. */
   static isSupported(): boolean {
@@ -60,6 +72,7 @@ export class MidiPlayer {
   /** Called by the owner whenever the score is re-rendered. Any in-flight
    *  playback is aborted and the prepared buffer is invalidated. */
   invalidate(): void {
+    this.generation++;
     if (this.buffer) {
       try {
         this.buffer.stop();
@@ -69,6 +82,8 @@ export class MidiPlayer {
     }
     this.buffer = null;
     this.preparedFor = null;
+    this.preparedOptions = null;
+    this.sourceTiming = [];
   }
 
   async play(tune: unknown, opts: PlayOptions = {}): Promise<void> {
@@ -76,6 +91,8 @@ export class MidiPlayer {
     const api = abcjs as unknown as SynthApi;
     const Synth = api.synth?.CreateSynth;
     if (!Synth) throw new Error("abcjs.synth.CreateSynth not available");
+    const generation = ++this.generation;
+    const synthOptions = opts.synthOptions ?? DEFAULT_SYNTH_OPTIONS;
 
     // Stop any existing playback first; seeking before start() is the
     // abcjs-supported way to begin from an offset.
@@ -95,19 +112,47 @@ export class MidiPlayer {
     if (this.audioContext.state === "suspended") {
       await this.audioContext.resume();
     }
+    if (generation !== this.generation) return;
 
-    if (!this.buffer || this.preparedFor !== tune) {
-      this.buffer = new Synth();
-      await this.buffer.init({
+    if (!this.buffer || this.preparedFor !== tune || this.preparedOptions !== synthOptions) {
+      const buffer = new Synth();
+      this.buffer = buffer;
+      this.preparedFor = null;
+      this.sourceTiming = [];
+      // abcjs appends repeat timings to source elements. Discard the previous
+      // synthesis annotations before rebuilding with different options.
+      for (const voice of sourceVoices(tune)) {
+        for (const element of voice) {
+          delete element.currentTrackWholeNotes;
+          delete element.currentTrackMilliseconds;
+        }
+      }
+      let noteMap: NoteMapTrack[] = [];
+      const options = filterSynthOptions(synthOptions as Record<string, unknown>);
+      await buffer.init({
         visualObj: tune,
         audioContext: this.audioContext,
-        millisecondsPerMeasure: getMsPerMeasure(tune)
+        millisecondsPerMeasure: missingMeterMeasureTime(tune, options),
+        // Let abcjs derive tempo so document options such as qpm also work.
+        options: {
+          ...options,
+          sequenceCallback: (tracks) => {
+            // abcjs calls this after applying swing. Use the actual audio
+            // events when starting playback from a selected note.
+            noteMap = tracks;
+            return tracks;
+          }
+        }
       });
-      await this.buffer.prime();
+      if (generation !== this.generation) return;
+      await buffer.prime();
+      if (generation !== this.generation) return;
       this.preparedFor = tune;
+      this.preparedOptions = synthOptions;
+      this.sourceTiming = collectSourceTiming(tune, buffer, noteMap);
     }
 
-    const seconds = findEventSeconds(tune, opts.startChar);
+    const seconds = findEventSeconds(this.sourceTiming, opts.startChar);
     if (seconds > 0) {
       this.buffer.seek(seconds, "seconds");
     } else {
@@ -117,6 +162,7 @@ export class MidiPlayer {
   }
 
   stop(): void {
+    this.generation++;
     if (this.buffer) {
       try {
         this.buffer.stop();
@@ -127,71 +173,95 @@ export class MidiPlayer {
   }
 }
 
-interface TuneWithTiming {
-  millisecondsPerMeasure?: (bpm?: number) => number;
-  setupEvents?: (
-    startingDelay: number,
-    timeDivider: number,
-    startingBpm: number,
-    warp?: number
-  ) => Array<{
-    milliseconds: number;
-    startChar?: number;
-    endChar?: number;
-  }>;
-  getBpm?: () => number;
+interface SourceElement {
+  el_type: string;
+  startChar?: number;
+  endChar?: number;
+  currentTrackWholeNotes?: number | number[];
+  currentTrackMilliseconds?: number | number[];
 }
 
-function getMsPerMeasure(tune: unknown): number | undefined {
-  const t = tune as TuneWithTiming;
-  if (typeof t.millisecondsPerMeasure === "function") {
-    try {
-      return t.millisecondsPerMeasure();
-    } catch {
-      return undefined;
-    }
-  }
-  return undefined;
+interface SourceTiming {
+  startChar: number;
+  endChar: number;
+  seconds: number;
 }
 
-/**
- * Convert a character offset into the starting time (in seconds) of the
- * first note event whose source range contains it. Returns 0 when no match
- * is found (e.g. the selection is a header field or bar line).
- */
-function findEventSeconds(tune: unknown, startChar: number | undefined): number {
-  if (typeof startChar !== "number") return 0;
-  const t = tune as TuneWithTiming;
-  if (typeof t.setupEvents !== "function") return 0;
-  let bpm = 120;
-  if (typeof t.getBpm === "function") {
-    try {
-      const v = t.getBpm();
-      if (typeof v === "number" && v > 0) bpm = v;
-    } catch {
-      /* ignore */
-    }
+function missingMeterMeasureTime(tune: unknown, options: SynthOptions): number | undefined {
+  const t = tune as {
+    getMeterFraction: () => { den: number };
+    metaText?: { tempo?: { bpm?: number; duration?: number[] } };
+  };
+  const denominator = t.getMeterFraction().den;
+  if (Number.isFinite(denominator) && denominator > 0) return undefined;
+  // For M:3 abcjs uses meterSize=1, but its default measure duration is NaN.
+  // Give that whole-note measure a finite tempo, honoring an explicit Q: unit.
+  const tempo = t.metaText?.tempo;
+  const bpm = options.qpm ?? tempo?.bpm ?? options.defaultQpm ?? 180;
+  const beat = options.qpm ? 1 / 4 : tempo?.duration?.reduce((sum, duration) => sum + duration, 0) ?? 1 / 4;
+  return 60000 / bpm / (beat > 0 ? beat : 1 / 4);
+}
+
+function sourceVoices(tune: unknown): SourceElement[][] {
+  const t = tune as { lines?: Array<{ staff?: Array<{ voices?: SourceElement[][] }> }> };
+  const voices = new Map<string, SourceElement[]>();
+  for (const line of t.lines ?? []) {
+    (line.staff ?? []).forEach((staff, staffIndex) => {
+      (staff.voices ?? []).forEach((voice, voiceIndex) => {
+        const key = `${staffIndex}:${voiceIndex}`;
+        const elements = voices.get(key) ?? [];
+        elements.push(...voice);
+        voices.set(key, elements);
+      });
+    });
   }
-  let events: ReturnType<NonNullable<TuneWithTiming["setupEvents"]>>;
-  try {
-    events = t.setupEvents(0, 1, bpm);
-  } catch {
-    return 0;
-  }
-  // Prefer the event whose range strictly contains startChar; otherwise the
-  // last event that starts at or before it.
-  let best: { milliseconds: number } | null = null;
-  for (const ev of events) {
-    if (typeof ev.startChar !== "number") continue;
-    if (ev.startChar <= startChar) {
-      if (typeof ev.endChar === "number" && ev.endChar > startChar) {
-        best = ev;
-        break;
+  return [...voices.values()];
+}
+
+/** Use the same whole-note units and multiplier as CreateSynth.prime(). */
+function collectSourceTiming(
+  tune: unknown,
+  buffer: MidiBufferLike,
+  tracks: NoteMapTrack[]
+): SourceTiming[] {
+  const multiplier = buffer.millisecondsPerMeasure / 1000 / buffer.meterSize;
+  const sounding = new Map<number, number>();
+  for (const track of tracks) {
+    for (const note of track) {
+      if (typeof note.startChar === "number") {
+        sounding.set(note.startChar, Math.min(sounding.get(note.startChar) ?? Infinity, note.start));
       }
-      best = ev;
-    } else {
-      break;
     }
   }
-  return best ? Math.max(0, best.milliseconds / 1000) : 0;
+  const events: SourceTiming[] = [];
+  for (const voice of sourceVoices(tune)) {
+    let nextStart = buffer.flattened.totalDuration;
+    for (let i = voice.length - 1; i >= 0; i--) {
+      const element = voice[i];
+      const timing = element.currentTrackWholeNotes;
+      const naturalStart = Array.isArray(timing) ? Math.min(...timing) : timing;
+      let start: number | undefined;
+      if (element.el_type === "note" && typeof naturalStart === "number") {
+        nextStart = naturalStart;
+        // Rests have no sound-map entry. Their native audio annotations still
+        // include the effective tempo, tempo changes, repeats and count-in.
+        start = sounding.get(element.startChar!) ?? naturalStart;
+      } else if (element.el_type === "bar") {
+        start = nextStart;
+      }
+      if (start !== undefined && typeof element.startChar === "number" && typeof element.endChar === "number") {
+        events.push({ startChar: element.startChar, endChar: element.endChar, seconds: Math.max(0, start * multiplier) });
+      }
+    }
+  }
+  return events;
+}
+
+function findEventSeconds(events: SourceTiming[], startChar: number | undefined): number {
+  if (typeof startChar !== "number") return 0;
+  let seconds = Infinity;
+  for (const ev of events) {
+    if (ev.startChar <= startChar && ev.endChar > startChar) seconds = Math.min(seconds, ev.seconds);
+  }
+  return Number.isFinite(seconds) ? seconds : 0;
 }
